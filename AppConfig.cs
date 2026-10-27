@@ -21,7 +21,7 @@ public class AppConfig
         Keys =
         {
             new KeyConfig { Key = "X", IntervalMs = 100, Enabled = true },
-            new KeyConfig { Key = "A", IntervalMs = 100, Enabled = true }
+            new KeyConfig { Key = "A", IntervalMs = 100, Enabled = false }
         }
     };
 }

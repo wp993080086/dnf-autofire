@@ -405,7 +405,7 @@ public class MainForm : Form
         // B 模式全局拦截提示
         var lblModeTip = new Label
         {
-            Text = "B 模式将全局拦截目标键，游戏外同样无法输入",
+            Text = "B 模式全局拦截目标键；连发实际下限 40ms（游戏帧检测极限）",
             Location = new Point(14, 79),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,

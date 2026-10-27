@@ -5,7 +5,8 @@ namespace DnfAutoFire;
 
 /// <summary>
 /// 连发引擎：独立高精度线程按 Stopwatch 调度（支持 1ms 级间隔）。
-/// 按住目标键 → 按设定间隔循环 SendInput(press+release)；松开立刻停止。
+/// 按住目标键 → 循环「按下 → 保持 holdMs → 抬起 → 等待剩余间隔」，模拟真实按键节奏。
+/// 按下与抬起拆成两个事件发送（保持按压时长），游戏按帧轮询才能稳定识别每一次按键。
 /// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
 /// </summary>
 internal sealed class AutoFireEngine
@@ -15,7 +16,8 @@ internal sealed class AutoFireEngine
         public int Vk;
         public int IntervalMs;
         public volatile bool Held;
-        public long NextDue; // Stopwatch ticks
+        public bool IsDown;  // 当前注入状态：true=模拟按下中
+        public long NextDue; // 下一次动作（按下或抬起）的 Stopwatch ticks
     }
 
     private readonly List<KeyState> _keys = new();
@@ -61,6 +63,15 @@ internal sealed class AutoFireEngine
         try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
         timeEndPeriod(1);
+        // 释放仍处于"模拟按下"状态的键，避免卡键
+        foreach (var k in _keys)
+        {
+            if (k.IsDown)
+            {
+                try { NativeInput.SendKey(k.Vk, up: true); } catch { /* 尽力释放 */ }
+                k.IsDown = false;
+            }
+        }
         _keys.Clear();
         _hook?.Dispose();
         _hook = null;
@@ -75,11 +86,32 @@ internal sealed class AutoFireEngine
             long now = sw.ElapsedTicks;
             foreach (var k in _keys)
             {
-                if (!k.Held || now < k.NextDue) continue;
-                NativeInput.TapKey(k.Vk);
+                if (!k.Held)
+                {
+                    if (k.IsDown) // 中途松开：立刻抬起，不留卡键
+                    {
+                        NativeInput.SendKey(k.Vk, up: true);
+                        k.IsDown = false;
+                    }
+                    continue;
+                }
+                if (now < k.NextDue) continue;
+
                 long period = k.IntervalMs * Stopwatch.Frequency / 1000;
-                // 追平落后量，避免累积漂移；不早于当前时刻
-                k.NextDue = Math.Max(k.NextDue + period, sw.ElapsedTicks);
+                long hold = Math.Clamp(k.IntervalMs / 2, 2, 30) * Stopwatch.Frequency / 1000;
+                if (!k.IsDown)
+                {
+                    NativeInput.SendKey(k.Vk, up: false); // 按下
+                    k.IsDown = true;
+                    k.NextDue = sw.ElapsedTicks + hold;   // 保持按压 holdMs 后抬起
+                }
+                else
+                {
+                    NativeInput.SendKey(k.Vk, up: true);  // 抬起
+                    k.IsDown = false;
+                    // 下一轮按下：本周期剩余时间；间隔小于按压时长时立刻再按
+                    k.NextDue = Math.Max(sw.ElapsedTicks + period - hold, sw.ElapsedTicks);
+                }
             }
             Thread.Sleep(1);
         }
@@ -92,6 +124,7 @@ internal sealed class AutoFireEngine
         if (Mode == "B") _hook!.SuppressCurrent();
         if (k.Held) return; // 原生长按会反复触发 keydown
         k.Held = true;
+        k.IsDown = false;
         k.NextDue = 0; // 立刻补一发，模拟真实单击
     }
 
@@ -100,6 +133,6 @@ internal sealed class AutoFireEngine
         var k = _keys.FirstOrDefault(x => x.Vk == vk);
         if (k == null) return;
         if (Mode == "B") _hook!.SuppressCurrent();
-        k.Held = false;
+        k.Held = false; // 抬起由 WorkerLoop 统一处理（若正按着会立即释放）
     }
 }

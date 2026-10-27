@@ -103,24 +103,29 @@ internal static class NativeMethods
     public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 }
 
-/// <summary>通过 SendInput 发送一次 press + release（使用扫描码，兼容性最好）。</summary>
+/// <summary>通过 SendInput 发送键盘事件（使用扫描码，兼容性最好）。</summary>
 internal static class NativeInput
 {
-    public static void TapKey(int vk)
+    /// <summary>发送单个按下或抬起事件（up=true 抬起）。</summary>
+    public static void SendKey(int vk, bool up)
     {
         ushort scan = (ushort)NativeMethods.MapVirtualKey((uint)vk, NativeMethods.MAPVK_VK_TO_VSC);
-        var down = new NativeMethods.INPUT { type = NativeMethods.INPUT_KEYBOARD };
-        down.U.ki = new NativeMethods.KEYBDINPUT
+        var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_KEYBOARD };
+        input.U.ki = new NativeMethods.KEYBDINPUT
         {
             wVk = (ushort)vk,
             wScan = scan,
-            dwFlags = NativeMethods.KEYEVENTF_SCANCODE,
+            dwFlags = NativeMethods.KEYEVENTF_SCANCODE | (up ? NativeMethods.KEYEVENTF_KEYUP : 0),
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };
-        var up = down;
-        up.U.ki.dwFlags |= NativeMethods.KEYEVENTF_KEYUP;
-        var inputs = new[] { down, up };
-        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    /// <summary>发送一次 press + release（零间隔，适合消息层消费；游戏内请用带保持时长的引擎调度）。</summary>
+    public static void TapKey(int vk)
+    {
+        SendKey(vk, up: false);
+        SendKey(vk, up: true);
     }
 }

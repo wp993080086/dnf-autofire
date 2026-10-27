@@ -4,9 +4,10 @@ using System.Runtime.InteropServices;
 namespace DnfAutoFire;
 
 /// <summary>
-/// 连发引擎：独立高精度线程按 Stopwatch 调度（支持 1ms 级间隔）。
-/// 按住目标键 → 循环「按下 → 保持 holdMs → 抬起 → 等待剩余间隔」，模拟真实按键节奏。
-/// 按下与抬起拆成两个事件发送（保持按压时长），游戏按帧轮询才能稳定识别每一次按键。
+/// 连发引擎：独立高精度线程按 Stopwatch 调度。
+/// 连点档（间隔 >30ms）：按下 → 保持 → 抬起循环，模拟真实按键节奏；
+/// 高频档（间隔 ≤30ms）：持续按住不放，由游戏内部循环攻击——Windows 输入拦截层
+/// 会随机丢弃高频注入事件，连点式高频注入会导致连发断续并拖累整条输入管线。
 /// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
 /// </summary>
 internal sealed class AutoFireEngine
@@ -97,20 +98,37 @@ internal sealed class AutoFireEngine
                 }
                 if (now < k.NextDue) continue;
 
-                long period = k.IntervalMs * Stopwatch.Frequency / 1000;
-                long hold = Math.Clamp(k.IntervalMs / 2, 2, 30) * Stopwatch.Frequency / 1000;
-                if (!k.IsDown)
+                if (k.IntervalMs <= 30)
                 {
-                    NativeInput.SendKey(k.Vk, up: false); // 按下
-                    k.IsDown = true;
-                    k.NextDue = sw.ElapsedTicks + hold;   // 保持按压 holdMs 后抬起
+                    // 高频档（≤30ms）：持续按住不放，游戏内部自行循环攻击。
+                    // 原因：2026 年起 Windows 输入拦截层（KB5086672 等）会随机丢弃
+                    // 高频 SendInput 事件，连点式注入表现为"动一下停一下"，且会拖累
+                    // 整条输入管线（鼠标卡顿抖动）。按住只发 1 个事件，最稳也最快。
+                    if (!k.IsDown)
+                    {
+                        NativeInput.SendKey(k.Vk, up: false);
+                        k.IsDown = true;
+                    }
+                    k.NextDue = long.MaxValue; // 松开时由 Held=false 分支统一抬起
                 }
                 else
                 {
-                    NativeInput.SendKey(k.Vk, up: true);  // 抬起
-                    k.IsDown = false;
-                    // 下一轮按下：本周期剩余时间；间隔小于按压时长时立刻再按
-                    k.NextDue = Math.Max(sw.ElapsedTicks + period - hold, sw.ElapsedTicks);
+                    // 连点档（>30ms）：按下保持一段时间再抬起，模拟真实按键节奏
+                    long period = k.IntervalMs * Stopwatch.Frequency / 1000;
+                    long hold = Math.Clamp(k.IntervalMs / 2, 2, 30) * Stopwatch.Frequency / 1000;
+                    if (!k.IsDown)
+                    {
+                        NativeInput.SendKey(k.Vk, up: false); // 按下
+                        k.IsDown = true;
+                        k.NextDue = sw.ElapsedTicks + hold;   // 保持按压 holdMs 后抬起
+                    }
+                    else
+                    {
+                        NativeInput.SendKey(k.Vk, up: true);  // 抬起
+                        k.IsDown = false;
+                        // 下一轮按下：本周期剩余时间；间隔小于按压时长时立刻再按
+                        k.NextDue = Math.Max(sw.ElapsedTicks + period - hold, sw.ElapsedTicks);
+                    }
                 }
             }
             Thread.Sleep(1);

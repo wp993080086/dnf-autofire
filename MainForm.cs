@@ -39,11 +39,15 @@ public class MainForm : Form
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
     private bool _loading = true; // 构造/加载配置期间不触发自动保存
+    private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
 
     public MainForm()
     {
+        _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        Icon = _appIcon;
+
         Font = new Font(AntStyle.FontName, 9f);
         Text = "DNF 连发工具";
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -89,6 +93,7 @@ public class MainForm : Form
             UnregisterHotkeys();
             trayIcon.Visible = false;
             trayIcon.Dispose();
+            _appIcon.Dispose();
         };
     }
 
@@ -569,7 +574,7 @@ public class MainForm : Form
 
         trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _appIcon,
             Text = "DNF 连发",
             Visible = true,
             ContextMenuStrip = trayMenu

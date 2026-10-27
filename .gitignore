@@ -5,6 +5,7 @@ publish/
 .vs/
 .history
 .vscode
+generated-images/
 
 # agent
-.workbuddy
+.workbuddy/

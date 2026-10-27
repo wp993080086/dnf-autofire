@@ -638,7 +638,7 @@ public class MainForm : Form
         {
             Location = new Point(220, 3),
             Size = new Size(84, 28),
-            Step = 50,
+            Step = 10,
             Min = MinMs,
             Max = MaxMs
         };

@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+*.user
+.vs/
+.history
+.vscode
+
+# agent
+.workbuddy

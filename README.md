@@ -63,6 +63,12 @@
 
 - Windows 10 / 11（x64）
 
+## 下载
+
+前往 [Releases](https://github.com/wp993080086/dnf-autofire/releases) 下载最新版 `dnf-autofire-v*.exe`，单文件、无需安装。
+
+推送 `v` 开头的 tag（如 `v1.0.0-beta`、`v1.1.0`）会自动触发 GitHub Actions 构建并发布到 Releases。
+
 ## 从源码构建
 
 需要 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)：
@@ -94,3 +100,7 @@ dotnet publish -c Release -r win-x64 ^
 ## 免责声明
 
 本工具仅供学习交流与个人效率用途，请遵守目标软件的用户协议与相关法律法规，使用本工具产生的一切后果由使用者自行承担。
+
+## 开源许可
+
+本项目基于 [MIT License](LICENSE) 开源。

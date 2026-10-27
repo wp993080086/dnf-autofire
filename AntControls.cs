@@ -322,13 +322,13 @@ internal class AntInput : Panel
 
 /// <summary>
 /// AntD 数字输入框（InputNumber）：右侧上/下步进按钮（整块右栏可点，上下各半），
-/// 默认步长 50，支持点击步进与键盘 ↑/↓，范围 1~5000，数值居中。
+/// 默认步长 1，支持点击步进与键盘 ↑/↓，范围 50~5000，数值居中。
 /// 可点区域悬停为手型光标，禁用时为禁止光标。
 /// </summary>
 internal sealed class AntNumber : AntInput
 {
-    public int Step { get; set; } = 50;
-    public int Min { get; set; } = 1;
+    public int Step { get; set; } = 1;
+    public int Min { get; set; } = 50;
     public int Max { get; set; } = 5000;
 
     public event EventHandler? ValueChanged;

@@ -4,7 +4,7 @@ public class MainForm : Form
 {
     private const int WM_HOTKEY = 0x0312;
     private const int HOTKEY_ID_START = 1;
-    private const int MinMs = 1;
+    private const int MinMs = 50;
     private const int MaxMs = 5000;
     private const int RowH = 34;
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
@@ -405,7 +405,7 @@ public class MainForm : Form
         // B 模式全局拦截提示
         var lblModeTip = new Label
         {
-            Text = "B 模式全局拦截目标键；连发实际下限 40ms（游戏帧检测极限）",
+            Text = "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1",
             Location = new Point(14, 79),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,

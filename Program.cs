@@ -49,6 +49,17 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --enginetest <A|B> <秒数> 自动开启连发引擎，数秒后自动关闭退出（真机验证连发行为）
+        if (args.Length >= 4 && args[1] == "--enginetest")
+        {
+            var form = new MainForm();
+            form.Show();
+            form.DebugEngineTest(args[2] == "A" ? "A" : "B",
+                int.TryParse(args[3], out int sec) ? sec : 5);
+            Application.Run(form);
+            return;
+        }
+
         // 单实例保护：双开会导致热键冲突与双重连发
         using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
         if (!createdNew)

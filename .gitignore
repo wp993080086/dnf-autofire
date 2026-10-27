@@ -7,5 +7,9 @@ publish/
 .vscode
 generated-images/
 
+# nul 保留名幽灵文件清理的临时脚本（Windows 保留名，无法进 git）
+nul
+del_nul.py
+
 # agent
 .workbuddy/

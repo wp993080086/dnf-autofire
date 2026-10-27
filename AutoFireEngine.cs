@@ -1,66 +1,105 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
 namespace DnfAutoFire;
 
 /// <summary>
-/// 连发引擎：每个目标键独立一个定时器。
+/// 连发引擎：独立高精度线程按 Stopwatch 调度（支持 1ms 级间隔）。
 /// 按住目标键 → 按设定间隔循环 SendInput(press+release)；松开立刻停止。
 /// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
 /// </summary>
 internal sealed class AutoFireEngine
 {
-    private readonly Dictionary<int, System.Windows.Forms.Timer> _timers = new();
+    private sealed class KeyState
+    {
+        public int Vk;
+        public int IntervalMs;
+        public volatile bool Held;
+        public long NextDue; // Stopwatch ticks
+    }
+
+    private readonly List<KeyState> _keys = new();
     private KeyboardHook? _hook;
+    private Thread? _worker;
+    private volatile bool _stop;
 
     public bool Running { get; private set; }
 
     /// <summary>"A" 保留原生并叠加；"B" 拦截原生仅模拟。</summary>
     public string Mode { get; set; } = "B";
 
+    [DllImport("winmm.dll")]
+    private static extern uint timeBeginPeriod(uint ms);
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeEndPeriod(uint ms);
+
     public void Start(List<(int Vk, int Ms)> targets)
     {
         Stop();
+        foreach (var t in targets)
+        {
+            if (_keys.Any(k => k.Vk == t.Vk)) continue;
+            _keys.Add(new KeyState { Vk = t.Vk, IntervalMs = Math.Max(1, t.Ms) });
+        }
+
         _hook = new KeyboardHook();
         _hook.KeyDown += OnKeyDown;
         _hook.KeyUp += OnKeyUp;
 
-        foreach (var t in targets)
-        {
-            if (_timers.ContainsKey(t.Vk)) continue;
-            var timer = new System.Windows.Forms.Timer { Interval = Math.Max(100, t.Ms) };
-            int vk = t.Vk;
-            timer.Tick += (_, _) => NativeInput.TapKey(vk);
-            _timers[t.Vk] = timer;
-        }
-
+        _stop = false;
+        timeBeginPeriod(1); // 把系统计时精度提到 1ms，Sleep(1) 才真正约 1ms
+        _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "AutoFireEngine" };
+        _worker.Start();
         _hook.Install();
         Running = true;
     }
 
     public void Stop()
     {
-        foreach (var timer in _timers.Values)
-        {
-            timer.Stop();
-            timer.Dispose();
-        }
-        _timers.Clear();
+        _stop = true;
+        try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
+        _worker = null;
+        timeEndPeriod(1);
+        _keys.Clear();
         _hook?.Dispose();
         _hook = null;
         Running = false;
     }
 
+    private void WorkerLoop()
+    {
+        var sw = Stopwatch.StartNew();
+        while (!_stop)
+        {
+            long now = sw.ElapsedTicks;
+            foreach (var k in _keys)
+            {
+                if (!k.Held || now < k.NextDue) continue;
+                NativeInput.TapKey(k.Vk);
+                long period = k.IntervalMs * Stopwatch.Frequency / 1000;
+                // 追平落后量，避免累积漂移；不早于当前时刻
+                k.NextDue = Math.Max(k.NextDue + period, sw.ElapsedTicks);
+            }
+            Thread.Sleep(1);
+        }
+    }
+
     private void OnKeyDown(int vk)
     {
-        if (!_timers.TryGetValue(vk, out var timer)) return;
+        var k = _keys.FirstOrDefault(x => x.Vk == vk);
+        if (k == null) return;
         if (Mode == "B") _hook!.SuppressCurrent();
-        // 原生长按会反复触发 keydown，定时器已在跑则忽略
-        if (timer.Enabled) return;
-        timer.Start();
+        if (k.Held) return; // 原生长按会反复触发 keydown
+        k.Held = true;
+        k.NextDue = 0; // 立刻补一发，模拟真实单击
     }
 
     private void OnKeyUp(int vk)
     {
-        if (!_timers.TryGetValue(vk, out var timer)) return;
+        var k = _keys.FirstOrDefault(x => x.Vk == vk);
+        if (k == null) return;
         if (Mode == "B") _hook!.SuppressCurrent();
-        timer.Stop();
+        k.Held = false;
     }
 }

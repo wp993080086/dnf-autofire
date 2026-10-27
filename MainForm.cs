@@ -4,7 +4,7 @@ public class MainForm : Form
 {
     private const int WM_HOTKEY = 0x0312;
     private const int HOTKEY_ID_START = 1;
-    private const int MinMs = 100;
+    private const int MinMs = 1;
     private const int MaxMs = 5000;
     private const int RowH = 34;
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
@@ -45,7 +45,8 @@ public class MainForm : Form
 
     public MainForm()
     {
-        _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)
+                   ?? SystemIcons.Application;
         Icon = _appIcon;
 
         Font = new Font(AntStyle.FontName, 9f);
@@ -99,6 +100,22 @@ public class MainForm : Form
 
     /// <summary>调试入口：--screenshot 模拟新增行。</summary>
     internal void DebugAddEmptyRow() => AddEmptyRow();
+
+    /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
+    internal void DebugEngineTest(string mode, int seconds)
+    {
+        cboMode.SelectedIndex = mode == "A" ? 1 : 0;
+        var t = new System.Windows.Forms.Timer { Interval = 800 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            DoStart();
+            var stop = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
+            stop.Tick += (_, _) => { stop.Stop(); DoStop(); Close(); };
+            stop.Start();
+        };
+        t.Start();
+    }
 
     /// <summary>
     /// 调试入口：--uitest &lt;prefix&gt;。窗口全程可见，模拟"进入运行态→回到停止态"的按钮状态切换
@@ -788,7 +805,7 @@ public class MainForm : Form
     private static int NormalizeMs(string text)
     {
         if (!int.TryParse(text?.Trim(), out int v) || v <= 0) return MinMs;
-        return ClampMs(((v + 25) / 50) * 50); // 就近取整到 50 的倍数（步长 50）
+        return ClampMs(v); // 允许 1~5000 任意整数（步进按钮仍按 50 步进）
     }
 
     private static int ClampMs(int v) => Math.Clamp(v, MinMs, MaxMs);

@@ -299,8 +299,12 @@ public class MainForm : Form
         var keys = _config.Keys ?? new List<KeyConfig>();
         foreach (var k in keys)
             AddRow(k.Key ?? "", ClampMs(k.IntervalMs), k.Enabled);
+        // 兜底补齐到 2 行，与默认配置语义一致：X 勾选、A 不勾选
         while (_rows.Count < 2)
-            AddRow(_rows.Count == 0 ? "X" : "A", MinMs, true);
+        {
+            bool isFirst = _rows.Count == 0;
+            AddRow(isFirst ? "X" : "A", MinMs, isFirst);
+        }
 
         RelayoutRows();
         UpdateRowButtons();

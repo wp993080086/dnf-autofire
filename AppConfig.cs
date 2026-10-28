@@ -6,7 +6,7 @@ namespace DnfAutoFire;
 public class KeyConfig
 {
     public string Key { get; set; } = "";
-    public int IntervalMs { get; set; } = 100;
+    public int IntervalMs { get; set; } = 50;
     public bool Enabled { get; set; } = true;
 }
 
@@ -20,8 +20,8 @@ public class AppConfig
     {
         Keys =
         {
-            new KeyConfig { Key = "X", IntervalMs = 100, Enabled = true },
-            new KeyConfig { Key = "A", IntervalMs = 100, Enabled = false }
+            new KeyConfig { Key = "X", IntervalMs = 50, Enabled = true },
+            new KeyConfig { Key = "A", IntervalMs = 50, Enabled = false }
         }
     };
 }

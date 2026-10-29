@@ -578,16 +578,16 @@ public class MainForm : Form
         AttachClearFocus(Controls);
     }
 
-    /// <summary>区域分隔：仅在模块相邻处画 1px 浅灰线（与 Tab 下边框同色同款），无外框。</summary>
+    /// <summary>区域分隔：仅在模块相邻处画 2px 浅灰线（颜色与 Tab 下边框一致），无外框。</summary>
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         var g = e.Graphics;
-        using var line = new Pen(AntStyle.Split);
-        // 主区与底部两区之间的水平分隔
-        g.DrawLine(line, 0, 304, Width, 304);
-        // 启动区与设置区之间的垂直分隔
-        g.DrawLine(line, 296, 305, 296, Height);
+        using var line = new SolidBrush(AntStyle.Split);
+        // 主区与底部两区之间的水平分隔（2px）
+        g.FillRectangle(line, 0, 304, Width, 2);
+        // 启动区与设置区之间的垂直分隔（2px）
+        g.FillRectangle(line, 296, 304, 2, Height - 304);
     }
 
     private void AttachClearFocus(Control.ControlCollection controls)

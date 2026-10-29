@@ -48,6 +48,8 @@ public class MainForm : Form
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
     private Label lblHotkey = null!;   // "连发热键/连点热键" 标签，随 Tab 切换
+    private Label lblMode = null!;     // "连发模式" 标签（仅按键页显示）
+    private Label lblModeTip = null!;  // 底部提示文字，随 Tab 切换
     private bool _loading = true;      // 构造/加载配置期间不触发自动保存
     private bool _hotkeySyncing;       // Tab 切换同步热键下拉框时不触发保存/重注册
     private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
@@ -554,7 +556,7 @@ public class MainForm : Form
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效
         var pnlSet = new Panel { Location = new Point(298, 306), Size = new Size(300, 92), BackColor = Color.White };
         lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
-        var lblM = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
+        lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
         cboStartKey = MakeHotkeySelect(new Point(86, 8));
         cboMode = new AntSelect { Location = new Point(86, 40), Width = 120 };
@@ -573,7 +575,7 @@ public class MainForm : Form
         cboMode.SelectedIndexChanged += (_, _) => { if (_loading) return; SaveConfig(); };
 
         // B 模式全局拦截提示
-        var lblModeTip = new Label
+        lblModeTip = new Label
         {
             Text = "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1",
             Location = new Point(14, 70),
@@ -582,7 +584,7 @@ public class MainForm : Form
             Font = new Font(AntStyle.FontName, 8f)
         };
 
-        pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblM, cboStartKey, cboMode, lblModeTip });
+        pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblMode, cboStartKey, cboMode, lblModeTip });
         Controls.Add(pnlSet);
 
         // 点击非输入区域时移除输入框焦点样式（面板类控件点击不会自动夺走焦点）
@@ -675,7 +677,7 @@ public class MainForm : Form
         SyncHotkeyUI();   // 热键下拉框跟随 Tab：连发热键 / 连点热键
     }
 
-    /// <summary>热键下拉框与标签跟随当前 Tab：按键页=连发热键（默认 F6）、鼠标页=连点热键（默认 F8）。</summary>
+    /// <summary>设置卡片跟随当前 Tab：按键页=连发热键 + 连发模式 + 键盘提示；鼠标页=连点热键 + 鼠标提示（无模式概念）。</summary>
     private void SyncHotkeyUI()
     {
         bool mouse = _tabIndex == 1;
@@ -683,6 +685,12 @@ public class MainForm : Form
         _hotkeySyncing = true;
         cboStartKey.Text = mouse ? _config.MouseStartHotkey : _config.StartHotkey;
         _hotkeySyncing = false;
+        // 连发模式是按键页专属设置，鼠标页隐藏；提示文字分别描述各自的间隔范围
+        lblMode.Visible = !mouse;
+        cboMode.Visible = !mouse;
+        lblModeTip.Text = mouse
+            ? "连点热键全局开关鼠标连点，与连发热键相互独立"
+            : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)

@@ -39,8 +39,8 @@ public class MainForm : Form
     private Panel pnlContent = null!;   // 行内容容器，滚动时整体位移
     private FlatScrollBar scrollBar = null!;
     private AntButton btnAdd = null!;
-    private AntButton btnMain = null!;
-    private AntButton btnMouse = null!;
+    private AntButton btnMain = null!;      // 唯一主按钮：控制当前 Tab 对应的引擎
+    private Label lblTarget = null!;        // "当前控制：按键连发/鼠标连点" 标识
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
     private bool _loading = true; // 构造/加载配置期间不触发自动保存
@@ -84,8 +84,7 @@ public class MainForm : Form
         LoadConfigToUi();
         _loading = false; // 之后任何配置变化都自动保存
 
-        btnMain.Click += (_, _) => { if (_engine.Running) DoStop(); else DoStart(); };
-        btnMouse.Click += (_, _) => { if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart(); };
+        btnMain.Click += (_, _) => ToggleCurrentEngine();
         btnAdd.Click += (_, _) => AddEmptyRow();
 
         Shown += (_, _) => RegisterHotkeys();
@@ -115,6 +114,7 @@ public class MainForm : Form
         keyPage.Visible = false;
         mousePage.Visible = true;
         tabHeader.Invalidate();
+        RefreshRunCard(); // 与 TabHeader_Click 保持一致，主按钮跟随 Tab
     }
 
     /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
@@ -216,9 +216,7 @@ public class MainForm : Form
         Logger.Info($"开启：目标键 {targets.Count} 个，模式 {_engine.Mode}");
 
         SetKeysUiLocked(true);
-        btnMain.Text = "关闭连发";
-        btnMain.Danger = true;
-        RefreshStatus();
+        RefreshRunCard();
 
         Hide();
         trayIcon.ShowBalloonTip(1500, "DNF 连发",
@@ -231,9 +229,7 @@ public class MainForm : Form
         _engine.Stop();
         Logger.Info("关闭连发");
         SetKeysUiLocked(false);
-        btnMain.Text = "开启连发";
-        btnMain.Danger = false;
-        RefreshStatus();
+        RefreshRunCard();
         // 窗口本就可见 → 只刷新状态，不抢焦点；隐藏时用托盘气泡告知
         if (Visible) return;
         trayIcon.ShowBalloonTip(1500, "DNF 连发", "连发已关闭。", ToolTipIcon.Info);
@@ -276,9 +272,7 @@ public class MainForm : Form
         Logger.Info($"开启鼠标连点：{targets.Count} 行");
 
         SetMouseUiLocked(true);
-        btnMouse.Text = "关闭连点";
-        btnMouse.Danger = true;
-        RefreshStatus();
+        RefreshRunCard();
 
         Hide();
         string desc = string.Join("、", targets.Select(t =>
@@ -293,11 +287,35 @@ public class MainForm : Form
         _mouseEngine.Stop();
         Logger.Info("关闭鼠标连点");
         SetMouseUiLocked(false);
-        btnMouse.Text = "开启连点";
-        btnMouse.Danger = false;
-        RefreshStatus();
+        RefreshRunCard();
         if (Visible) return;
         trayIcon.ShowBalloonTip(1500, "鼠标连点", "鼠标连点已关闭。", ToolTipIcon.Info);
+    }
+
+    /// <summary>主按钮开关当前 Tab 对应的引擎（按钮点击与热键共用此入口）。</summary>
+    private void ToggleCurrentEngine()
+    {
+        if (_tabIndex == 0)
+        {
+            if (_engine.Running) DoStop(); else DoStart();
+        }
+        else
+        {
+            if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
+        }
+    }
+
+    /// <summary>刷新主按钮与"当前控制"标识：跟随 Tab，且反映对应引擎的运行状态。</summary>
+    private void RefreshRunCard()
+    {
+        bool mouse = _tabIndex == 1;
+        bool running = mouse ? _mouseEngine.Running : _engine.Running;
+        lblTarget.Text = mouse ? "当前控制：鼠标连点" : "当前控制：按键连发";
+        btnMain.Text = mouse
+            ? (running ? "关闭连点" : "开启连点")
+            : (running ? "关闭连发" : "开启连发");
+        btnMain.Danger = running;
+        RefreshStatus(); // 状态栏同时展示两引擎状态
     }
 
     private static string DescribeStopMode(MouseClickEngine.StopMode mode, int value) => mode switch
@@ -347,8 +365,8 @@ public class MainForm : Form
         {
             if (m.WParam.ToInt32() == HOTKEY_ID_START)
             {
-                // 单键开关：按一下开、再按一下关
-                if (_engine.Running) DoStop(); else DoStart();
+                // 热键只作用于当前 Tab 的引擎：按键页开关连发，鼠标页开关连点
+                ToggleCurrentEngine();
             }
         }
     }
@@ -424,6 +442,7 @@ public class MainForm : Form
 
         SetKeysUiLocked(_engine.Running);
         SetMouseUiLocked(_mouseEngine.Running);
+        RefreshRunCard();
         RefreshScroll();
     }
 
@@ -470,38 +489,39 @@ public class MainForm : Form
         mainCard.Controls.Add(mousePage);
         Controls.Add(mainCard);
 
-        // 启动卡片（左下）：按键连发与鼠标连点各自独立开关，互不影响
-        var cardRun = new AntCard { Location = new Point(12, 288), Size = new Size(288, 100) };
+        // 启动卡片（左下）：单按钮跟随当前 Tab——按键页控制连发、鼠标页控制连点，
+        // 热键同样只作用于当前 Tab 的引擎；"当前控制"标识突出显示目标
+        var cardRun = new AntCard { Location = new Point(12, 288), Size = new Size(272, 100) };
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
             Text = "开启连发",
-            Location = new Point(14, 12),
-            Size = new Size(124, 44),
+            Location = new Point(14, 10),
+            Size = new Size(244, 40),
             Font = new Font(AntStyle.FontName, 10f)
         };
-        btnMouse = new AntButton
+        lblTarget = new Label
         {
-            Kind = AntButton.AntKind.Primary,
-            Text = "开启连点",
-            Location = new Point(148, 12),
-            Size = new Size(124, 44),
-            Font = new Font(AntStyle.FontName, 10f)
+            Text = "当前控制：按键连发",
+            Location = new Point(14, 56),
+            AutoSize = true,
+            ForeColor = AntStyle.Primary,
+            Font = new Font(AntStyle.FontName, 9f, FontStyle.Bold)
         };
         lblStatus = new Label
         {
             Text = "未开启",
-            Location = new Point(14, 64),
+            Location = new Point(14, 78),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary
         };
         cardRun.Controls.Add(btnMain);
-        cardRun.Controls.Add(btnMouse);
+        cardRun.Controls.Add(lblTarget);
         cardRun.Controls.Add(lblStatus);
         Controls.Add(cardRun);
 
         // 热键与设置卡片（右下）：下拉框高度自适应（约 27px），行距 32 → 间隙 5px，两行垂直居中
-        var cardHot = new AntCard { Location = new Point(308, 288), Size = new Size(280, 100) };
+        var cardHot = new AntCard { Location = new Point(292, 288), Size = new Size(296, 100) };
         var lblS = new Label { Text = "启动热键", Location = new Point(14, 24), AutoSize = true, ForeColor = AntStyle.TextSec };
         var lblM = new Label { Text = "连发模式", Location = new Point(14, 56), AutoSize = true, ForeColor = AntStyle.TextSec };
 
@@ -608,6 +628,7 @@ public class MainForm : Form
         keyPage.Visible = idx == 0;
         mousePage.Visible = idx == 1;
         tabHeader.Invalidate();
+        RefreshRunCard(); // 主按钮与"当前控制"标识跟随 Tab 切换
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)

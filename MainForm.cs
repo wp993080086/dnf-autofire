@@ -578,21 +578,16 @@ public class MainForm : Form
         AttachClearFocus(Controls);
     }
 
-    /// <summary>区域边框：2px 深色（外框 + 主区/启动区/设置区分隔线），Tab 下边框仍为 1px 样式不变。</summary>
+    /// <summary>区域分隔：仅在模块相邻处画 1px 浅灰线（与 Tab 下边框同色同款），无外框。</summary>
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         var g = e.Graphics;
-        using var dark = new SolidBrush(Color.FromArgb(38, 38, 38));
-        // 外框 2px
-        g.FillRectangle(dark, 0, 0, Width, 2);             // 上
-        g.FillRectangle(dark, 0, Height - 2, Width, 2);    // 下
-        g.FillRectangle(dark, 0, 0, 2, Height);            // 左
-        g.FillRectangle(dark, Width - 2, 0, 2, Height);    // 右
-        // 主区与底部两区的水平分隔（2px）
-        g.FillRectangle(dark, 2, 304, Width - 4, 2);
-        // 启动区与设置区的垂直分隔（2px）
-        g.FillRectangle(dark, 296, 306, 2, Height - 308);
+        using var line = new Pen(AntStyle.Split);
+        // 主区与底部两区之间的水平分隔
+        g.DrawLine(line, 0, 304, Width, 304);
+        // 启动区与设置区之间的垂直分隔
+        g.DrawLine(line, 296, 305, 296, Height);
     }
 
     private void AttachClearFocus(Control.ControlCollection controls)

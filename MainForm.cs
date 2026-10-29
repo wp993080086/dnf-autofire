@@ -7,6 +7,9 @@ public class MainForm : Form
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int MinMs = 50;
     private const int MaxMs = 5000;
+    private const int MouseMinMs = 100;      // 鼠标连点间隔下限
+    private const int MouseMaxMs = 10000;    // 鼠标连点间隔上限（10 秒）
+    private const int MouseDefaultMs = 300;  // 鼠标连点间隔默认值
     private const int MaxClicks = 9999;   // 鼠标连点：次数上限
     private const int RowH = 34;
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
@@ -400,7 +403,7 @@ public class MainForm : Form
             MouseClicks = _mouseRows.Select(r => new MouseClickConfig
             {
                 Button = r.Button,
-                IntervalMs = NormalizeMs(r.NumMs.Text),
+                IntervalMs = NormalizeMouseMs(r.NumMs.Text),
                 StopMode = r.SelStop.SelectedIndex == 0 ? "count" : "infinite",
                 StopValue = Math.Max(1, r.NumValue.Value),
                 Enabled = r.Chk.Checked
@@ -448,7 +451,7 @@ public class MainForm : Form
             var cfg = mouseCfg.FirstOrDefault(m => m.Button == r.Button);
             if (cfg == null) continue;
             r.Chk.Checked = cfg.Enabled;
-            r.NumMs.Text = ClampMs(cfg.IntervalMs).ToString();
+            r.NumMs.Text = Math.Clamp(cfg.IntervalMs, MouseMinMs, MouseMaxMs).ToString();
             r.SelStop.SelectedIndex = cfg.StopMode == "count" ? 0 : 1; // 先同步下拉框
             ApplyMouseStopMode(r, cfg.StopMode, cfg.StopValue);        // 再以配置值收口（最终生效）
         }
@@ -808,11 +811,11 @@ public class MainForm : Form
             {
                 Location = new Point(188, 3),
                 Size = new Size(84, 28),
-                Step = 10,
-                Min = MinMs,
-                Max = MaxMs
+                Step = 100,
+                Min = MouseMinMs,
+                Max = MouseMaxMs
             };
-            row.NumMs.Text = "100";
+            row.NumMs.Text = MouseDefaultMs.ToString();
             var lblMs = new Label { Text = "毫秒，", Location = new Point(278, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
             row.SelStop = new AntSelect { Location = new Point(322, 2), Width = 110 };
             row.SelStop.Inner.DropDownWidth = 110;
@@ -837,7 +840,16 @@ public class MainForm : Form
                 if (!_loading) SaveConfig();
             };
             row.NumMs.Inner.KeyPress += MsBox_KeyPress;
-            row.NumMs.Inner.Leave += MsBox_Leave;
+            row.NumMs.Inner.Leave += (_, _) =>
+            {
+                int fixedMs = NormalizeMouseMs(row.NumMs.Text);
+                if (row.NumMs.Text != fixedMs.ToString())
+                {
+                    row.NumMs.Text = fixedMs.ToString();
+                    UpdateStatus("间隔已修正为 " + fixedMs + " 毫秒");
+                }
+                if (!_loading) SaveConfig();
+            };
             row.NumMs.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
             row.NumValue.Inner.KeyPress += MsBox_KeyPress;
             row.NumValue.Inner.Leave += (_, _) =>
@@ -859,7 +871,7 @@ public class MainForm : Form
 
         var lblHint = new Label
         {
-            Text = "开启后按住对应鼠标键即自动连点，松开即停；间隔范围 50-5000ms，游戏内有效间隔下限 40ms。",
+            Text = "开启后按住对应鼠标键即自动连点，松开即停；间隔范围 100-10000ms，游戏内有效间隔下限 40ms。",
             Location = new Point(16, 130),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
@@ -1119,6 +1131,13 @@ public class MainForm : Form
     }
 
     private static int ClampMs(int v) => Math.Clamp(v, MinMs, MaxMs);
+
+    /// <summary>鼠标连点间隔钳制：100~10000ms，非法输入回落默认 300。</summary>
+    private static int NormalizeMouseMs(string text)
+    {
+        if (!int.TryParse(text?.Trim(), out int v) || v <= 0) return MouseDefaultMs;
+        return Math.Clamp(v, MouseMinMs, MouseMaxMs);
+    }
 
     private static int KeyCharToVk(char c) =>
         c is >= 'A' and <= 'Z' or >= '0' and <= '9' ? c : -1;

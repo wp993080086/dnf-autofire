@@ -14,7 +14,7 @@ public class KeyConfig
 public class MouseClickConfig
 {
     public string Button { get; set; } = "L"; // L=左键 R=右键
-    public int IntervalMs { get; set; } = 100;
+    public int IntervalMs { get; set; } = 300;
     public string StopMode { get; set; } = "infinite";
     public int StopValue { get; set; } = 50;
     public bool Enabled { get; set; } = false;

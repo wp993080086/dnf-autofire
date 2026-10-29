@@ -33,6 +33,7 @@ public class MainForm : Form
     private Rectangle _animFrom, _animTo;  // 动画起止
     private float _animT = 1f;             // 0~1，>=1 表示无动画
     private readonly int[] _tabWidths = new int[2]; // 构造时测量一次，避免每次 Paint 重复测量不一致
+    private readonly Font _tabFont; // Tab 文字：加大加粗，突出两个页签
     private readonly Font _fontBold;
 
     private Panel pnlRows = null!;
@@ -70,9 +71,10 @@ public class MainForm : Form
         // Tab 下划线滑动动画
         _tabAnimTimer = new System.Windows.Forms.Timer { Interval = 15 };
         _tabAnimTimer.Tick += TabAnim_Tick;
+        _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
-        _tabWidths[0] = TextRenderer.MeasureText("按键", Font).Width + 16;
-        _tabWidths[1] = TextRenderer.MeasureText("鼠标", Font).Width + 16;
+        _tabWidths[0] = TextRenderer.MeasureText("按键", _tabFont).Width + 16;
+        _tabWidths[1] = TextRenderer.MeasureText("鼠标", _tabFont).Width + 16;
 
         try
         {
@@ -97,6 +99,7 @@ public class MainForm : Form
             Application.RemoveMessageFilter(_wheelFilter);
             _tabAnimTimer.Dispose();
             _fontBold.Dispose();
+            _tabFont.Dispose();
             _engine.Stop();
             _mouseEngine.Stop();
             UnregisterHotkeys();
@@ -620,7 +623,7 @@ public class MainForm : Form
             var color = active ? AntStyle.Primary
                 : i == _tabHover ? AntStyle.TextPri
                 : AntStyle.TextSec;
-            TextRenderer.DrawText(g, text, active ? _fontBold : Font, new Point(x, 12), color);
+            TextRenderer.DrawText(g, text, _tabFont, new Point(x, 11), color);
             _tabRects.Add((new Rectangle(x, 0, w, 44), i));
             x += w + 24;
         }

@@ -797,16 +797,9 @@ public class MainForm : Form
                 Location = new Point(0, 2),
                 Size = new Size(56, 28)
             };
-            var lblHold = new Label { Text = "按住", Location = new Point(58, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
-            var lblBtn = new Label
-            {
-                Text = label,
-                Location = new Point(92, 9),
-                AutoSize = true,
-                ForeColor = AntStyle.TextPri,
-                Font = new Font(AntStyle.FontName, 9f, FontStyle.Bold)
-            };
-            var lblGap = new Label { Text = "键，间隔", Location = new Point(128, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
+            var lblHold = MakeRowText("按住", 58);
+            var lblBtn = MakeRowText(label, 92, AntStyle.TextPri, bold: true);
+            var lblGap = MakeRowText("键，间隔", 128);
             row.NumMs = new AntNumber
             {
                 Location = new Point(188, 3),
@@ -816,7 +809,7 @@ public class MainForm : Form
                 Max = MouseMaxMs
             };
             row.NumMs.Text = MouseDefaultMs.ToString();
-            var lblMs = new Label { Text = "毫秒，", Location = new Point(278, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
+            var lblMs = MakeRowText("毫秒，", 278);
             row.SelStop = new AntSelect { Location = new Point(322, 2), Width = 110 };
             row.SelStop.Inner.DropDownWidth = 110;
             row.SelStop.Inner.Items.Add("点 N 次");
@@ -945,7 +938,7 @@ public class MainForm : Form
             Location = new Point(0, 2),
             Size = new Size(56, 28)
         };
-        var lblPress = new Label { Text = "按下", Location = new Point(58, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
+        var lblPress = MakeRowText("按下", 58);
         row.TxtKey = new AntInput
         {
             Location = new Point(94, 3),
@@ -955,7 +948,7 @@ public class MainForm : Form
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
         row.TxtKey.Text = key;
-        var lblGap = new Label { Text = "键，间隔", Location = new Point(156, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
+        var lblGap = MakeRowText("键，间隔", 156);
         row.TxtMs = new AntNumber
         {
             Location = new Point(220, 3),
@@ -965,7 +958,7 @@ public class MainForm : Form
             Max = MaxMs
         };
         row.TxtMs.Text = ms.ToString();
-        var lblMs = new Label { Text = "毫秒", Location = new Point(310, 9), AutoSize = true, ForeColor = AntStyle.TextSec };
+        var lblMs = MakeRowText("毫秒", 310);
         row.LnkDel = new AntButton
         {
             Kind = AntButton.AntKind.Text,
@@ -1122,6 +1115,21 @@ public class MainForm : Form
             UpdateStatus("间隔已修正为 " + fixedMs + " 毫秒");
         }
         if (!_loading) SaveConfig(); // 手动输入的毫秒值离开输入框时落盘
+    }
+
+    /// <summary>行内静态文字：保持 AutoSize（不裁切），用 MeasureText 把文字垂直中心对齐到 28px 控件带中线。</summary>
+    private static Label MakeRowText(string text, int x, Color? color = null, bool bold = false)
+    {
+        var font = bold ? new Font(AntStyle.FontName, 9f, FontStyle.Bold) : new Font(AntStyle.FontName, 9f);
+        int textH = TextRenderer.MeasureText(text, font).Height;
+        return new Label
+        {
+            Text = text,
+            Location = new Point(x, 2 + (28 - textH) / 2),
+            AutoSize = true,
+            ForeColor = color ?? AntStyle.TextSec,
+            Font = font
+        };
     }
 
     private static int NormalizeMs(string text)

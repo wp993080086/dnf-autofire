@@ -802,11 +802,11 @@ public class MainForm : Form
         page.Controls.Add(lblHint);
     }
 
-    /// <summary>按停止条件模式调整数值框：count=次数(1-9999)、duration=秒(1-3600)、infinite=禁用。</summary>
+    /// <summary>按停止条件模式调整数值框：count=次数(1-9999)、duration=秒(1-3600)、infinite=隐藏（无数值含义）。</summary>
     private void ApplyMouseStopMode(MouseRow r, string mode, int value)
     {
         bool infinite = mode == "infinite";
-        r.NumValue.Enabled = !infinite;
+        r.NumValue.Visible = !infinite;
         if (infinite) return;
         if (mode == "count")
         {

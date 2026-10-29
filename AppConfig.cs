@@ -10,9 +10,20 @@ public class KeyConfig
     public bool Enabled { get; set; } = true;
 }
 
+/// <summary>鼠标连点配置行。StopMode: count=点N次 / duration=持续N秒 / infinite=手动停止。</summary>
+public class MouseClickConfig
+{
+    public string Button { get; set; } = "L"; // L=左键 R=右键
+    public int IntervalMs { get; set; } = 100;
+    public string StopMode { get; set; } = "infinite";
+    public int StopValue { get; set; } = 50;
+    public bool Enabled { get; set; } = false;
+}
+
 public class AppConfig
 {
     public List<KeyConfig> Keys { get; set; } = new();
+    public List<MouseClickConfig> MouseClicks { get; set; } = new();
     public string StartHotkey { get; set; } = "F6";
     public string Mode { get; set; } = "B";
 
@@ -22,6 +33,11 @@ public class AppConfig
         {
             new KeyConfig { Key = "X", IntervalMs = 50, Enabled = true },
             new KeyConfig { Key = "A", IntervalMs = 50, Enabled = false }
+        },
+        MouseClicks =
+        {
+            new MouseClickConfig { Button = "L", IntervalMs = 100, StopMode = "infinite", StopValue = 50, Enabled = false },
+            new MouseClickConfig { Button = "R", IntervalMs = 100, StopMode = "infinite", StopValue = 50, Enabled = false }
         }
     };
 }

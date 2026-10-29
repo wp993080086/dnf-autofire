@@ -5,11 +5,30 @@ namespace DnfAutoFire;
 internal static class NativeMethods
 {
     public const int WH_KEYBOARD_LL = 13;
+    public const int WH_MOUSE_LL = 14;
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_KEYUP = 0x0101;
     public const int WM_SYSKEYDOWN = 0x0104;
     public const int WM_SYSKEYUP = 0x0105;
     public const uint LLKHF_INJECTED = 0x10;
+
+    // 低级鼠标钩子消息与 injected 标志
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_RBUTTONDOWN = 0x0204;
+    public const int WM_RBUTTONUP = 0x0205;
+    public const uint LLMHF_INJECTED = 0x20;
+
+    // VK 鼠标键码（钩子事件统一用）
+    public const int VK_LBUTTON = 0x01;
+    public const int VK_RBUTTON = 0x02;
+
+    // SendInput 鼠标事件标志
+    public const uint INPUT_MOUSE = 0;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
 
     public const uint MAPVK_VK_TO_VSC = 0;
     public const uint INPUT_KEYBOARD = 1;
@@ -27,6 +46,23 @@ internal static class NativeMethods
         public uint flags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -127,5 +163,24 @@ internal static class NativeInput
     {
         SendKey(vk, up: false);
         SendKey(vk, up: true);
+    }
+
+    /// <summary>发送鼠标按下/抬起事件（left=true 左键，否则右键；up=true 抬起）。位置为当前光标处。</summary>
+    public static void SendMouseButton(bool left, bool up)
+    {
+        uint flag = left
+            ? (up ? NativeMethods.MOUSEEVENTF_LEFTUP : NativeMethods.MOUSEEVENTF_LEFTDOWN)
+            : (up ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_RIGHTDOWN);
+        var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_MOUSE };
+        input.U.mi = new NativeMethods.MOUSEINPUT
+        {
+            dx = 0,
+            dy = 0,
+            mouseData = 0,
+            dwFlags = flag,
+            time = 0,
+            dwExtraInfo = IntPtr.Zero
+        };
+        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 }

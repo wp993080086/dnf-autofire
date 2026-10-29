@@ -24,6 +24,8 @@ internal static class Program
                 if (args.Length >= 4 && int.TryParse(args[3], out int add))
                     for (int i = 0; i < add; i++)
                         form.DebugAddEmptyRow();
+                if (args.Length >= 5 && args[4] == "mouse")
+                    form.DebugShowMouseTab(); // 切到鼠标 Tab 再截图
                 Thread.Sleep(300);
                 Application.DoEvents();
                 using var bmp = new Bitmap(form.Width, form.Height);

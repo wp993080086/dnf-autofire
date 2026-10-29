@@ -61,7 +61,7 @@ public class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = AntStyle.BgLayout;
+        BackColor = Color.White; // 无留白卡片：白色底 + 深色边框划分区域
         ClientSize = new Size(600, 400);
 
         BuildUi();
@@ -117,6 +117,7 @@ public class MainForm : Form
         mousePage.Visible = true;
         tabHeader.Invalidate();
         RefreshRunCard(); // 与 TabHeader_Click 保持一致，主按钮跟随 Tab
+        SyncHotkeyUI();   // 热键下拉框/标签同步跟随 Tab
     }
 
     /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
@@ -487,41 +488,41 @@ public class MainForm : Form
 
     private void BuildUi()
     {
-        var mainCard = new AntCard { Location = new Point(12, 12), Size = new Size(576, 268) };
+        // 主区域（Tab + 配置页）：三个区域（主区/启动区/设置区）以 2px 深色边框分隔，无留白卡片
+        var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(596, 302), BackColor = Color.White };
 
-        // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线）
-        tabHeader = new Panel { Location = Point.Empty, Size = new Size(576, 44), BackColor = Color.White };
+        // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
+        tabHeader = new Panel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White };
         tabHeader.Paint += TabHeader_Paint;
         tabHeader.MouseClick += TabHeader_Click;
         tabHeader.MouseMove += TabHeader_Move;
         tabHeader.MouseLeave += (_, _) => { if (_tabHover != -1) { _tabHover = -1; tabHeader.Invalidate(); } };
 
-        keyPage = new Panel { Location = new Point(0, 44), Size = new Size(576, 216), BackColor = Color.White };
-        mousePage = new Panel { Location = new Point(0, 44), Size = new Size(576, 216), BackColor = Color.White, Visible = false };
+        keyPage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White };
+        mousePage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White, Visible = false };
         BuildMousePage(mousePage);
 
         BuildKeysPage(keyPage);
 
-        mainCard.Controls.Add(tabHeader);
-        mainCard.Controls.Add(keyPage);
-        mainCard.Controls.Add(mousePage);
-        Controls.Add(mainCard);
+        pnlMain.Controls.Add(tabHeader);
+        pnlMain.Controls.Add(keyPage);
+        pnlMain.Controls.Add(mousePage);
+        Controls.Add(pnlMain);
 
-        // 启动卡片（左下）：单按钮跟随当前 Tab——按键页控制连发、鼠标页控制连点，
-        // 热键同样只作用于当前 Tab 的引擎；"当前控制"标识突出显示目标
-        var cardRun = new AntCard { Location = new Point(12, 288), Size = new Size(272, 100) };
+        // 启动区（左下）：单按钮跟随当前 Tab——按键页控制连发、鼠标页控制连点
+        var pnlRun = new Panel { Location = new Point(2, 306), Size = new Size(294, 92), BackColor = Color.White };
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
             Text = "开启连发",
-            Location = new Point(14, 10),
+            Location = new Point(14, 6),
             Size = new Size(244, 40),
             Font = new Font(AntStyle.FontName, 10f)
         };
         lblTarget = new Label
         {
             Text = "当前控制：按键连发",
-            Location = new Point(14, 56),
+            Location = new Point(14, 50),
             AutoSize = true,
             ForeColor = AntStyle.Primary,
             Font = new Font(AntStyle.FontName, 9f, FontStyle.Bold)
@@ -529,23 +530,23 @@ public class MainForm : Form
         lblStatus = new Label
         {
             Text = "未开启",
-            Location = new Point(14, 78),
+            Location = new Point(14, 70),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary
         };
-        cardRun.Controls.Add(btnMain);
-        cardRun.Controls.Add(lblTarget);
-        cardRun.Controls.Add(lblStatus);
-        Controls.Add(cardRun);
+        pnlRun.Controls.Add(btnMain);
+        pnlRun.Controls.Add(lblTarget);
+        pnlRun.Controls.Add(lblStatus);
+        Controls.Add(pnlRun);
 
-        // 热键与设置卡片（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
+        // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效
-        var cardHot = new AntCard { Location = new Point(292, 288), Size = new Size(296, 100) };
-        lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 24), AutoSize = true, ForeColor = AntStyle.TextSec };
-        var lblM = new Label { Text = "连发模式", Location = new Point(14, 56), AutoSize = true, ForeColor = AntStyle.TextSec };
+        var pnlSet = new Panel { Location = new Point(298, 306), Size = new Size(300, 92), BackColor = Color.White };
+        lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
+        var lblM = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
-        cboStartKey = MakeHotkeySelect(new Point(86, 18));
-        cboMode = new AntSelect { Location = new Point(86, 50), Width = 120 };
+        cboStartKey = MakeHotkeySelect(new Point(86, 8));
+        cboMode = new AntSelect { Location = new Point(86, 40), Width = 120 };
         cboMode.Inner.DropDownWidth = 120;
         cboMode.Inner.Items.Add("B 拦截原生");
         cboMode.Inner.Items.Add("A 保留原生叠加");
@@ -564,17 +565,34 @@ public class MainForm : Form
         var lblModeTip = new Label
         {
             Text = "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1",
-            Location = new Point(14, 79),
+            Location = new Point(14, 70),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
 
-        cardHot.Controls.AddRange(new Control[] { lblHotkey, lblM, cboStartKey, cboMode, lblModeTip });
-        Controls.Add(cardHot);
+        pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblM, cboStartKey, cboMode, lblModeTip });
+        Controls.Add(pnlSet);
 
         // 点击非输入区域时移除输入框焦点样式（面板类控件点击不会自动夺走焦点）
         AttachClearFocus(Controls);
+    }
+
+    /// <summary>区域边框：2px 深色（外框 + 主区/启动区/设置区分隔线），Tab 下边框仍为 1px 样式不变。</summary>
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        using var dark = new SolidBrush(Color.FromArgb(38, 38, 38));
+        // 外框 2px
+        g.FillRectangle(dark, 0, 0, Width, 2);             // 上
+        g.FillRectangle(dark, 0, Height - 2, Width, 2);    // 下
+        g.FillRectangle(dark, 0, 0, 2, Height);            // 左
+        g.FillRectangle(dark, Width - 2, 0, 2, Height);    // 右
+        // 主区与底部两区的水平分隔（2px）
+        g.FillRectangle(dark, 2, 304, Width - 4, 2);
+        // 启动区与设置区的垂直分隔（2px）
+        g.FillRectangle(dark, 296, 306, 2, Height - 308);
     }
 
     private void AttachClearFocus(Control.ControlCollection controls)
@@ -722,7 +740,7 @@ public class MainForm : Form
         pnlRows = new Panel
         {
             Location = new Point(16, 40),
-            Size = new Size(528, 168),
+            Size = new Size(528, 210),
             BackColor = Color.White
         };
         scrollBar = new FlatScrollBar

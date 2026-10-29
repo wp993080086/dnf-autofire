@@ -449,7 +449,12 @@ public class MainForm : Form
         foreach (var r in _mouseRows)
         {
             var cfg = mouseCfg.FirstOrDefault(m => m.Button == r.Button);
-            if (cfg == null) continue;
+            if (cfg == null)
+            {
+                // 旧配置（v1.0.0 无 MouseClicks）或缺失该键条目：按默认"松手停止"初始化，不能跳过
+                ApplyMouseStopMode(r, "infinite", 50);
+                continue;
+            }
             r.Chk.Checked = cfg.Enabled;
             r.NumMs.Text = Math.Clamp(cfg.IntervalMs, MouseMinMs, MouseMaxMs).ToString();
             r.SelStop.SelectedIndex = cfg.StopMode == "count" ? 0 : 1; // 先同步下拉框
@@ -824,6 +829,7 @@ public class MainForm : Form
                 Max = MaxClicks
             };
             row.NumValue.Text = "50";
+            ApplyMouseStopMode(row, "infinite", 50); // 初始即收口：默认松手停止时隐藏数值框（配置缺失时不会再漏显示）
 
             row.SelStop.SelectedIndexChanged += (_, _) =>
             {

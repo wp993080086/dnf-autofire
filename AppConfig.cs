@@ -10,7 +10,7 @@ public class KeyConfig
     public bool Enabled { get; set; } = true;
 }
 
-/// <summary>鼠标连点配置行。StopMode: count=点N次 / duration=持续N秒 / infinite=手动停止。</summary>
+/// <summary>鼠标连点配置行。StopMode: count=点N次 / infinite=松手停止。</summary>
 public class MouseClickConfig
 {
     public string Button { get; set; } = "L"; // L=左键 R=右键
@@ -24,7 +24,8 @@ public class AppConfig
 {
     public List<KeyConfig> Keys { get; set; } = new();
     public List<MouseClickConfig> MouseClicks { get; set; } = new();
-    public string StartHotkey { get; set; } = "F6";
+    public string StartHotkey { get; set; } = "F6";      // 按键连发热键
+    public string MouseStartHotkey { get; set; } = "F8"; // 鼠标连点热键
     public string Mode { get; set; } = "B";
 
     public static AppConfig Default() => new()

@@ -6,12 +6,12 @@ namespace DnfAutoFire;
 /// <summary>
 /// 鼠标连点引擎：按住配置的鼠标键时自动连点，松开即停。
 /// 与 AutoFireEngine 相同的 Stopwatch 调度：按下保持 ≥20ms、抬起 ≥20ms，
-/// 有效间隔下限 40ms（游戏按帧轮询）。次数/时长模式按「每次按压」重新计数。
+/// 有效间隔下限 40ms（游戏按帧轮询）。点 N 次模式按「每次按压」重新计数。
 /// 触发时拦截原生点击（吞掉按下与配对的抬起），由引擎统一注入，避免重复点击。
 /// </summary>
 internal sealed class MouseClickEngine
 {
-    public enum StopMode { Count, Duration, Infinite }
+    public enum StopMode { Count, Infinite }
 
     public readonly record struct MouseTarget(int Button, int IntervalMs, StopMode Mode, int StopValue);
 
@@ -26,7 +26,6 @@ internal sealed class MouseClickEngine
         public bool IsDown;   // 当前注入状态
         public long NextDue;
         public int ClicksLeft;
-        public long Deadline;
     }
 
     private readonly List<ClickState> _tasks = new();
@@ -113,8 +112,8 @@ internal sealed class MouseClickEngine
                     continue;
                 }
 
-                // 停止条件已达成（次数点满 / 时长耗尽）：结束本次连点会话，等下次物理按压
-                if (t.Done || (t.Mode == StopMode.Duration && now >= t.Deadline))
+                // 停止条件已达成（次数点满）：结束本次连点会话，等下次物理按压
+                if (t.Done)
                 {
                     if (t.IsDown)
                     {
@@ -162,12 +161,11 @@ internal sealed class MouseClickEngine
         _swallowUp[button] = true;
 
         if (t.Held) return; // 原生长按会反复触发 down
-        // 开始一次新的连点会话：次数/时长按本次按压重新起算
+        // 开始一次新的连点会话：次数按本次按压重新起算
         t.Held = true;
         t.Done = false;
         t.IsDown = false;
         t.ClicksLeft = t.StopValue;
-        t.Deadline = _sw.ElapsedTicks + (long)t.StopValue * Stopwatch.Frequency;
         t.NextDue = 0; // 立刻补一发，模拟真实单击
     }
 

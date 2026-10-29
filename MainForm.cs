@@ -3,11 +3,11 @@ namespace DnfAutoFire;
 public class MainForm : Form
 {
     private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID_START = 1;
+    private const int HOTKEY_ID_START = 1;  // 按键连发热键
+    private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int MinMs = 50;
     private const int MaxMs = 5000;
     private const int MaxClicks = 9999;   // 鼠标连点：次数上限
-    private const int MaxSeconds = 3600;  // 鼠标连点：时长上限（秒）
     private const int RowH = 34;
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
 
@@ -43,7 +43,9 @@ public class MainForm : Form
     private Label lblTarget = null!;        // "当前控制：按键连发/鼠标连点" 标识
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
-    private bool _loading = true; // 构造/加载配置期间不触发自动保存
+    private Label lblHotkey = null!;   // "连发热键/连点热键" 标签，随 Tab 切换
+    private bool _loading = true;      // 构造/加载配置期间不触发自动保存
+    private bool _hotkeySyncing;       // Tab 切换同步热键下拉框时不触发保存/重注册
     private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
@@ -246,7 +248,7 @@ public class MainForm : Form
             targets.Add(new MouseClickEngine.MouseTarget(
                 r.Button == "L" ? 1 : 2,
                 NormalizeMs(r.NumMs.Text),
-                r.SelStop.SelectedIndex switch { 0 => MouseClickEngine.StopMode.Count, 1 => MouseClickEngine.StopMode.Duration, _ => MouseClickEngine.StopMode.Infinite },
+                r.SelStop.SelectedIndex == 0 ? MouseClickEngine.StopMode.Count : MouseClickEngine.StopMode.Infinite,
                 Math.Max(1, r.NumValue.Value)));
         }
 
@@ -321,8 +323,7 @@ public class MainForm : Form
     private static string DescribeStopMode(MouseClickEngine.StopMode mode, int value) => mode switch
     {
         MouseClickEngine.StopMode.Count => $"{value} 次",
-        MouseClickEngine.StopMode.Duration => $"{value} 秒",
-        _ => "手动停止"
+        _ => "松手停止"
     };
 
     /// <summary>状态栏：两个引擎各自的运行状态，独立开关一目了然。</summary>
@@ -363,10 +364,15 @@ public class MainForm : Form
         base.WndProc(ref m);
         if (m.Msg == WM_HOTKEY)
         {
-            if (m.WParam.ToInt32() == HOTKEY_ID_START)
+            // 每个热键固定对应自己的引擎：连发热键开关连发、连点热键开关连点，与当前 Tab 无关
+            switch (m.WParam.ToInt32())
             {
-                // 热键只作用于当前 Tab 的引擎：按键页开关连发，鼠标页开关连点
-                ToggleCurrentEngine();
+                case HOTKEY_ID_START:
+                    if (_engine.Running) DoStop(); else DoStart();
+                    break;
+                case HOTKEY_ID_MOUSE:
+                    if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
+                    break;
             }
         }
     }
@@ -375,9 +381,11 @@ public class MainForm : Form
 
     private void SaveConfig()
     {
+        // 热键下拉框跟随 Tab：当前 Tab 编辑对应引擎的热键，另一侧沿用已存值
         var cfg = new AppConfig
         {
-            StartHotkey = cboStartKey.Text,
+            StartHotkey = _tabIndex == 0 ? cboStartKey.Text : _config.StartHotkey,
+            MouseStartHotkey = _tabIndex == 1 ? cboStartKey.Text : _config.MouseStartHotkey,
             Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
             Keys = _rows.Select(r => new KeyConfig
             {
@@ -389,7 +397,7 @@ public class MainForm : Form
             {
                 Button = r.Button,
                 IntervalMs = NormalizeMs(r.NumMs.Text),
-                StopMode = r.SelStop.SelectedIndex switch { 0 => "count", 1 => "duration", _ => "infinite" },
+                StopMode = r.SelStop.SelectedIndex == 0 ? "count" : "infinite",
                 StopValue = Math.Max(1, r.NumValue.Value),
                 Enabled = r.Chk.Checked
             }).ToList()
@@ -426,7 +434,7 @@ public class MainForm : Form
 
         RelayoutRows();
         UpdateRowButtons();
-        cboStartKey.Text = _config.StartHotkey;
+        cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连发热键
         cboMode.SelectedIndex = _config.Mode == "A" ? 1 : 0;
 
         // 鼠标连点行：固定左/右两行，按 Button 匹配配置
@@ -437,7 +445,8 @@ public class MainForm : Form
             if (cfg == null) continue;
             r.Chk.Checked = cfg.Enabled;
             r.NumMs.Text = ClampMs(cfg.IntervalMs).ToString();
-            ApplyMouseStopMode(r, cfg.StopMode, cfg.StopValue);
+            r.SelStop.SelectedIndex = cfg.StopMode == "count" ? 0 : 1; // 先同步下拉框
+            ApplyMouseStopMode(r, cfg.StopMode, cfg.StopValue);        // 再以配置值收口（最终生效）
         }
 
         SetKeysUiLocked(_engine.Running);
@@ -451,18 +460,27 @@ public class MainForm : Form
         UnregisterHotkeys();
         var handle = Handle; // 强制创建句柄
 
-        bool ok = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_START, 0, (uint)HotkeyStringToVk(cboStartKey.Text));
-        if (!ok)
+        // 连发热键（按键页配置，默认 F6）
+        bool okKeys = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_START, 0, (uint)HotkeyStringToVk(_config.StartHotkey));
+        // 连点热键（鼠标页配置，默认 F8）
+        bool okMouse = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_MOUSE, 0, (uint)HotkeyStringToVk(_config.MouseStartHotkey));
+
+        var failed = new List<string>();
+        if (!okKeys) failed.Add(_config.StartHotkey);
+        if (!okMouse) failed.Add(_config.MouseStartHotkey);
+        if (failed.Count > 0)
         {
-            Logger.Info($"热键注册失败：{cboStartKey.Text}（可能被其他程序占用）");
-            UpdateStatus("警告：热键注册失败（可能被其他程序占用）");
+            string names = string.Join("、", failed);
+            Logger.Info($"热键注册失败：{names}（可能被其他程序占用）");
+            UpdateStatus("警告：热键 " + names + " 注册失败（可能被其他程序占用）");
         }
     }
 
     private void UnregisterHotkeys()
     {
-        if (IsHandleCreated)
-            NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_START);
+        if (!IsHandleCreated) return;
+        NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_START);
+        NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_MOUSE);
     }
 
     // ---------- UI 构建 ----------
@@ -520,9 +538,10 @@ public class MainForm : Form
         cardRun.Controls.Add(lblStatus);
         Controls.Add(cardRun);
 
-        // 热键与设置卡片（右下）：下拉框高度自适应（约 27px），行距 32 → 间隙 5px，两行垂直居中
+        // 热键与设置卡片（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
+        // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效
         var cardHot = new AntCard { Location = new Point(292, 288), Size = new Size(296, 100) };
-        var lblS = new Label { Text = "启动热键", Location = new Point(14, 24), AutoSize = true, ForeColor = AntStyle.TextSec };
+        lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 24), AutoSize = true, ForeColor = AntStyle.TextSec };
         var lblM = new Label { Text = "连发模式", Location = new Point(14, 56), AutoSize = true, ForeColor = AntStyle.TextSec };
 
         cboStartKey = MakeHotkeySelect(new Point(86, 18));
@@ -535,7 +554,7 @@ public class MainForm : Form
         // 自动保存：热键变化需重新注册，模式/其余配置只写文件
         cboStartKey.SelectedIndexChanged += (_, _) =>
         {
-            if (_loading) return;
+            if (_loading || _hotkeySyncing) return;
             SaveConfig();
             RegisterHotkeys();
         };
@@ -551,7 +570,7 @@ public class MainForm : Form
             Font = new Font(AntStyle.FontName, 8f)
         };
 
-        cardHot.Controls.AddRange(new Control[] { lblS, lblM, cboStartKey, cboMode, lblModeTip });
+        cardHot.Controls.AddRange(new Control[] { lblHotkey, lblM, cboStartKey, cboMode, lblModeTip });
         Controls.Add(cardHot);
 
         // 点击非输入区域时移除输入框焦点样式（面板类控件点击不会自动夺走焦点）
@@ -629,6 +648,17 @@ public class MainForm : Form
         mousePage.Visible = idx == 1;
         tabHeader.Invalidate();
         RefreshRunCard(); // 主按钮与"当前控制"标识跟随 Tab 切换
+        SyncHotkeyUI();   // 热键下拉框跟随 Tab：连发热键 / 连点热键
+    }
+
+    /// <summary>热键下拉框与标签跟随当前 Tab：按键页=连发热键（默认 F6）、鼠标页=连点热键（默认 F8）。</summary>
+    private void SyncHotkeyUI()
+    {
+        bool mouse = _tabIndex == 1;
+        lblHotkey.Text = mouse ? "连点热键" : "连发热键";
+        _hotkeySyncing = true;
+        cboStartKey.Text = mouse ? _config.MouseStartHotkey : _config.StartHotkey;
+        _hotkeySyncing = false;
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)
@@ -722,7 +752,7 @@ public class MainForm : Form
         };
     }
 
-    /// <summary>鼠标连点页：固定左/右两行 + 停止条件下拉（点 N 次 / 持续 N 秒 / 手动停止）。</summary>
+    /// <summary>鼠标连点页：固定左/右两行 + 停止条件下拉（点 N 次 / 松手停止，默认松手停止）。</summary>
     private void BuildMousePage(Control page)
     {
         var lblTitle = new Label
@@ -771,9 +801,8 @@ public class MainForm : Form
             row.SelStop = new AntSelect { Location = new Point(322, 2), Width = 110 };
             row.SelStop.Inner.DropDownWidth = 110;
             row.SelStop.Inner.Items.Add("点 N 次");
-            row.SelStop.Inner.Items.Add("持续 N 秒");
-            row.SelStop.Inner.Items.Add("手动停止");
-            row.SelStop.SelectedIndex = 2;
+            row.SelStop.Inner.Items.Add("松手停止");
+            row.SelStop.SelectedIndex = 1; // 默认松手停止
             row.NumValue = new AntNumber
             {
                 Location = new Point(440, 3),
@@ -786,8 +815,8 @@ public class MainForm : Form
 
             row.SelStop.SelectedIndexChanged += (_, _) =>
             {
-                // 切换停止条件：调整数值框范围/可用性，并按当前值重新钳制
-                string mode = row.SelStop.SelectedIndex switch { 0 => "count", 1 => "duration", _ => "infinite" };
+                // 切换停止条件：调整数值框可见性/范围，并按当前值重新钳制
+                string mode = row.SelStop.SelectedIndex == 0 ? "count" : "infinite";
                 ApplyMouseStopMode(row, mode, row.NumValue.Value);
                 if (!_loading) SaveConfig();
             };
@@ -823,24 +852,16 @@ public class MainForm : Form
         page.Controls.Add(lblHint);
     }
 
-    /// <summary>按停止条件模式调整数值框：count=次数(1-9999)、duration=秒(1-3600)、infinite=隐藏（无数值含义）。</summary>
+    /// <summary>按停止条件模式调整数值框：count=次数(1-9999)显示可编辑，infinite(松手停止)=隐藏。</summary>
     private void ApplyMouseStopMode(MouseRow r, string mode, int value)
     {
-        bool infinite = mode == "infinite";
+        bool infinite = mode != "count";
         r.NumValue.Visible = !infinite;
+        r.NumValue.Enabled = !infinite && !_mouseEngine.Running; // 修复：切回"点 N 次"时必须恢复可编辑
         if (infinite) return;
-        if (mode == "count")
-        {
-            r.NumValue.Min = 1;
-            r.NumValue.Max = MaxClicks;
-            r.NumValue.Step = 10;
-        }
-        else // duration
-        {
-            r.NumValue.Min = 1;
-            r.NumValue.Max = MaxSeconds;
-            r.NumValue.Step = 1;
-        }
+        r.NumValue.Min = 1;
+        r.NumValue.Max = MaxClicks;
+        r.NumValue.Step = 10;
         r.NumValue.SetValue(value);
     }
 
@@ -1120,7 +1141,7 @@ public class MainForm : Form
             r.Chk.Enabled = !locked;
             r.NumMs.Enabled = !locked;
             r.SelStop.Enabled = !locked;
-            r.NumValue.Enabled = !locked && r.SelStop.SelectedIndex != 2; // 手动停止时数值框本就禁用
+            r.NumValue.Enabled = !locked && r.SelStop.SelectedIndex == 0; // 仅"点 N 次"有数值框
         }
     }
 

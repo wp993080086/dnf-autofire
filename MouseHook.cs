@@ -35,7 +35,7 @@ internal sealed class MouseHook : IDisposable
         {
             var s = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
             // 程序自己 SendInput 的点击带 injected 标志，直接放行，避免自我触发死循环
-            if ((s.flags & NativeMethods.LLMHF_INJECTED) == 0)
+            if ((s.flags & NativeMethods.LLMHF_ANY_INJECTED) == 0)
             {
                 int msg = wParam.ToInt32();
                 int? button = msg switch

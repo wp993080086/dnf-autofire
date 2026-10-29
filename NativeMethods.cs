@@ -12,12 +12,14 @@ internal static class NativeMethods
     public const int WM_SYSKEYUP = 0x0105;
     public const uint LLKHF_INJECTED = 0x10;
 
-    // 低级鼠标钩子消息与 injected 标志
+    // 低级鼠标钩子消息与 injected 标志（MSLLHOOKSTRUCT.flags）
     public const int WM_LBUTTONDOWN = 0x0201;
     public const int WM_LBUTTONUP = 0x0202;
     public const int WM_RBUTTONDOWN = 0x0204;
     public const int WM_RBUTTONUP = 0x0205;
-    public const uint LLMHF_INJECTED = 0x20;
+    public const uint LLMHF_INJECTED = 0x01;            // 事件由 SendInput 等注入
+    public const uint LLMHF_LOWER_IL_INJECTED = 0x02;   // 低完整性进程注入
+    public const uint LLMHF_ANY_INJECTED = LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED;
 
     // VK 鼠标键码（钩子事件统一用）
     public const int VK_LBUTTON = 0x01;

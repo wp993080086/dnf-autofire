@@ -515,7 +515,7 @@ public class MainForm : Form
         var lblVersion = new Label
         {
             // ProductVersion 形如 "1.1.0+<commit>"，只取主版本号
-            Text = $"v{Application.ProductVersion.Split('+')[0]} · wp993080086",
+            Text = $"v{Application.ProductVersion.Split('+')[0]} · 鹏多多",
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f),

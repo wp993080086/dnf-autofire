@@ -82,7 +82,7 @@
 
 ## 下载
 
-前往 [Releases](https://github.com/wp993080086/dnf-autofire/releases) 下载最新版 `dnf-autofire-v*.exe`，单文件、无需安装。
+前往 [Releases](https://github.com/wp993080086/dnf-autofire/releases) 下载最新版 `dnf-autofire.exe`，单文件、无需安装。
 
 推送 `v` 开头的 tag（如 `v1.0.0-beta`、`v1.1.0`）会自动触发 GitHub Actions 构建并发布到 Releases。
 

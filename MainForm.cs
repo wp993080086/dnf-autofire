@@ -511,6 +511,20 @@ public class MainForm : Form
         tabHeader.MouseMove += TabHeader_Move;
         tabHeader.MouseLeave += (_, _) => { if (_tabHover != -1) { _tabHover = -1; tabHeader.Invalidate(); } };
 
+        // Tab 栏右侧空白处：小号浅灰的版本号与作者（版本随 csproj 自动更新）
+        var lblVersion = new Label
+        {
+            // ProductVersion 形如 "1.1.0+<commit>"，只取主版本号
+            Text = $"v{Application.ProductVersion.Split('+')[0]} · wp993080086",
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 8f),
+            BackColor = Color.Transparent,
+            Enabled = false // 纯展示，不响应鼠标（事件穿透到 tabHeader）
+        };
+        tabHeader.Controls.Add(lblVersion);
+        lblVersion.Location = new Point(tabHeader.Width - lblVersion.Width - 16, (44 - lblVersion.Height) / 2);
+
         keyPage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White };
         mousePage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White, Visible = false };
         BuildMousePage(mousePage);

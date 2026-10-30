@@ -24,14 +24,9 @@ jobs:
       - name: Publish single-file exe
         run: dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 
-      - name: Rename exe with tag
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          Copy-Item "bin/Release/net8.0-windows/win-x64/publish/dnf-autofire.exe" "dnf-autofire-$tag.exe"
-
+      # 附件统一叫 dnf-autofire.exe：版本信息由 Release 页面与 tag 承载，不在文件名重复
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dnf-autofire-*.exe
+          files: bin/Release/net8.0-windows/win-x64/publish/dnf-autofire.exe
           generate_release_notes: true

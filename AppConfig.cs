@@ -3,10 +3,13 @@ using System.Text.Json;
 
 namespace DnfAutoFire;
 
+/// <summary>按键连发配置行。StopMode: hold=松手停止 / auto=自动连按（StopValue 0 表示无限）。</summary>
 public class KeyConfig
 {
     public string Key { get; set; } = "";
     public int IntervalMs { get; set; } = 50;
+    public string StopMode { get; set; } = "hold";
+    public int StopValue { get; set; } = 0;
     public bool Enabled { get; set; } = true;
 }
 

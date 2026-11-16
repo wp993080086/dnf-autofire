@@ -11,7 +11,9 @@ public class MainForm : Form
     private const int MouseMaxMs = 10000;    // 鼠标连点间隔上限（10 秒）
     private const int MouseDefaultMs = 300;  // 鼠标连点间隔默认值
     private const int MaxClicks = 9999;   // 鼠标连点：次数上限
+    private const int MaxKeyRepeat = 100000; // 自动连按：次数上限（0 = 无限）
     private const int RowH = 34;
+    private const int RowWidth = 544;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
 
     // Tab 索引与标题：页面顺序 = Tab 顺序，加页只改这里与 BuildUi 的构建调用
@@ -120,6 +122,14 @@ public class MainForm : Form
 
         btnMain.Click += (_, _) => ToggleCurrentEngine();
         btnAdd.Click += (_, _) => AddEmptyRow();
+
+        // 全部是自动连按且次数跑完 → 引擎自行收尾，UI 同步回停止态（回调在工作线程，需切回 UI）
+        _engine.AllDone += () =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try { BeginInvoke(new Action(OnAutoRepeatFinished)); }
+            catch (Exception ex) { Logger.Error("AllDone", ex); }
+        };
 
         Shown += (_, _) =>
         {
@@ -247,13 +257,17 @@ public class MainForm : Form
 
     private void DoStart()
     {
-        var targets = new List<(int Vk, int Ms)>();
+        var targets = new List<AutoFireEngine.KeyTarget>();
         foreach (var r in _rows)
         {
             if (!r.Chk.Checked || string.IsNullOrWhiteSpace(r.TxtKey.Text)) continue;
             int vk = KeyCharToVk(r.TxtKey.Text.Trim().ToUpper()[0]);
             if (vk < 0) continue;
-            targets.Add((vk, NormalizeMs(r.TxtMs.Text)));
+            targets.Add(new AutoFireEngine.KeyTarget(
+                vk,
+                NormalizeMs(r.TxtMs.Text),
+                r.SelStop.SelectedIndex == 1 ? AutoFireEngine.TriggerMode.Auto : AutoFireEngine.TriggerMode.Hold,
+                NormalizeKeyRepeat(r.NumCount.Text)));
         }
 
         // 空配置拦截：没有可连发的键时不开引擎，直接引导用户去配置
@@ -282,8 +296,11 @@ public class MainForm : Form
         RefreshRunCard();
 
         Hide();
-        trayIcon.ShowBalloonTip(1500, "DNF 连发",
-            $"已开启连发（{targets.Count} 个目标键），最小化到托盘。\n按 {_config.StartHotkey} 或托盘菜单可关闭。",
+        string autoDesc = string.Join("、", targets
+            .Where(t => t.Mode == AutoFireEngine.TriggerMode.Auto)
+            .Select(t => t.Count <= 0 ? "自动连按(无限)" : $"自动连按({t.Count} 次)"));
+        trayIcon.ShowBalloonTip(1800, "DNF 连发",
+            $"已开启连发（{targets.Count} 个目标键）{(autoDesc.Length > 0 ? "\n" + autoDesc : "")}\n最小化到托盘，按 {_config.StartHotkey} 或托盘菜单可关闭。",
             ToolTipIcon.Info);
     }
 
@@ -296,6 +313,17 @@ public class MainForm : Form
         // 窗口本就可见 → 只刷新状态，不抢焦点；隐藏时用托盘气泡告知
         if (Visible) return;
         trayIcon.ShowBalloonTip(1500, "DNF 连发", "连发已关闭。", ToolTipIcon.Info);
+    }
+
+    /// <summary>自动连按把设定次数跑完：引擎已经自行退出，这里把界面拉回停止态。</summary>
+    private void OnAutoRepeatFinished()
+    {
+        if (IsDisposed) return;
+        _engine.Stop();
+        Logger.Info("自动连按已完成设定次数，引擎自动关闭");
+        SetKeysUiLocked(false);
+        RefreshRunCard();
+        trayIcon.ShowBalloonTip(1600, "DNF 连发", "自动连按已完成设定次数，已自动关闭。", ToolTipIcon.Info);
     }
 
     // ---------- 鼠标连点：启动 / 停止 ----------
@@ -480,6 +508,8 @@ public class MainForm : Form
             {
                 Key = r.TxtKey.Text.Trim().ToUpper(),
                 IntervalMs = NormalizeMs(r.TxtMs.Text),
+                StopMode = r.SelStop.SelectedIndex == 1 ? "auto" : "hold",
+                StopValue = NormalizeKeyRepeat(r.NumCount.Text),
                 Enabled = r.Chk.Checked
             }).ToList(),
             MouseClicks = _mouseRows.Select(r => new MouseClickConfig
@@ -513,7 +543,8 @@ public class MainForm : Form
 
         var keys = _config.Keys ?? new List<KeyConfig>();
         foreach (var k in keys)
-            AddRow(k.Key ?? "", ClampMs(k.IntervalMs), k.Enabled);
+            AddRow(k.Key ?? "", ClampMs(k.IntervalMs), k.Enabled,
+                k.StopMode == "auto" ? "auto" : "hold", k.StopValue);
         // 兜底补齐到 2 行，与默认配置语义一致：X 勾选、A 不勾选
         while (_rows.Count < 2)
         {
@@ -910,7 +941,7 @@ public class MainForm : Form
         pnlRows = new Panel
         {
             Location = new Point(16, 40),
-            Size = new Size(528, 210),
+            Size = new Size(RowWidth + 12, 210),
             BackColor = Color.White
         };
         scrollBar = new FlatScrollBar
@@ -924,7 +955,7 @@ public class MainForm : Form
         pnlContent = new Panel
         {
             Location = new Point(0, 0),
-            Size = new Size(516, RowH),
+            Size = new Size(RowWidth, RowH),
             BackColor = Color.White
         };
 
@@ -1115,6 +1146,8 @@ public class MainForm : Form
         public AntCheckBox Chk = null!;
         public AntInput TxtKey = null!;
         public AntNumber TxtMs = null!;
+        public AntSelect SelStop = null!;   // 松手停止 / 自动连按
+        public AntNumber NumCount = null!;  // 自动连按次数（0 = 无限），仅自动模式显示
         public AntButton LnkDel = null!;
     }
 
@@ -1129,10 +1162,10 @@ public class MainForm : Form
         public AntNumber NumValue = null!;
     }
 
-    private void AddRow(string key, int ms, bool enabled)
+    private void AddRow(string key, int ms, bool enabled, string stopMode = "hold", int stopValue = 0)
     {
         var row = new RowControls();
-        var panel = new Panel { Size = new Size(516, RowH), BackColor = Color.White };
+        var panel = new Panel { Size = new Size(RowWidth, RowH), BackColor = Color.White };
         row.RowPanel = panel;
 
         row.Chk = new AntCheckBox
@@ -1142,38 +1175,74 @@ public class MainForm : Form
             Location = new Point(0, 2),
             Size = new Size(56, 28)
         };
-        var lblPress = MakeRowText("按下", 58);
         row.TxtKey = new AntInput
         {
-            Location = new Point(94, 3),
+            Location = new Point(58, 3),
             Size = new Size(56, 28)
         };
         row.TxtKey.Inner.MaxLength = 1;
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
         row.TxtKey.Text = key;
-        var lblGap = MakeRowText("键，间隔", 156);
+        var lblGap = MakeRowText("键，间隔", 120);
         row.TxtMs = new AntNumber
         {
-            Location = new Point(220, 3),
+            Location = new Point(184, 3),
             Size = new Size(84, 28),
             Step = 10,
             Min = MinMs,
             Max = MaxMs
         };
         row.TxtMs.Text = ms.ToString();
-        var lblMs = MakeRowText("毫秒", 310);
+        var lblMs = MakeRowText("毫秒，", 274);
+        row.SelStop = new AntSelect { Location = new Point(318, 2), Width = 96 };
+        row.SelStop.Inner.DropDownWidth = 96;
+        row.SelStop.Inner.Items.Add("松手停止");
+        row.SelStop.Inner.Items.Add("自动连按");
+        row.SelStop.SelectedIndex = stopMode == "auto" ? 1 : 0; // 先定下拉框，事件尚未挂上
+        row.NumCount = new AntNumber
+        {
+            Location = new Point(420, 3),
+            Size = new Size(72, 28),
+            Step = 100,
+            Min = 0,
+            Max = MaxKeyRepeat
+        };
+        row.NumCount.Text = "0"; // 0 = 无限
+        row.NumCount.Inner.MaxLength = 6;
+        ApplyKeyStopMode(row, stopMode, stopValue); // 初始收口：松手停止时隐藏次数框
         row.LnkDel = new AntButton
         {
             Kind = AntButton.AntKind.Text,
             Danger = true,
             Text = "删除",
-            Location = new Point(352, 3),
-            Size = new Size(52, 26),
+            Location = new Point(496, 3),
+            Size = new Size(44, 26),
             Visible = false
         };
         row.LnkDel.Click += (_, _) => DeleteRow(row);
 
+        row.SelStop.SelectedIndexChanged += (_, _) =>
+        {
+            ApplyKeyStopMode(row, row.SelStop.SelectedIndex == 1 ? "auto" : "hold", row.NumCount.Value);
+            if (!_loading) SaveConfig();
+        };
+        // 次数框：只允许数字，离开时钳制到 0-100000（0 = 无限）
+        row.NumCount.Inner.KeyPress += MsBox_KeyPress;
+        row.NumCount.Inner.Leave += (_, _) =>
+        {
+            if (_loading) return;
+            int fixedCount = NormalizeKeyRepeat(row.NumCount.Text);
+            if (row.NumCount.Text != fixedCount.ToString())
+            {
+                row.NumCount.Text = fixedCount.ToString();
+                UpdateStatus(fixedCount == 0
+                    ? "次数已修正为 0（无限次）"
+                    : "次数已修正为 " + fixedCount + " 次");
+            }
+            SaveConfig();
+        };
+        row.NumCount.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
         row.TxtKey.Inner.KeyPress += KeyBox_KeyPress;
         row.TxtKey.Inner.KeyDown += KeyBox_KeyDown;
         row.TxtKey.Inner.TextChanged += KeyBox_TextChanged;
@@ -1185,10 +1254,30 @@ public class MainForm : Form
 
         panel.Controls.AddRange(new Control[]
         {
-            row.Chk, lblPress, row.TxtKey, lblGap, row.TxtMs, lblMs, row.LnkDel
+            row.Chk, row.TxtKey, lblGap, row.TxtMs, lblMs, row.SelStop, row.NumCount, row.LnkDel
         });
 
         _rows.Add(row);
+    }
+
+    /// <summary>按停止条件模式调整次数框：auto=显示（0-100000，0 表示无限），hold=隐藏。</summary>
+    private void ApplyKeyStopMode(RowControls r, string mode, int value)
+    {
+        bool auto = mode == "auto";
+        r.NumCount.Visible = auto;
+        r.NumCount.Enabled = auto && !_engine.Running;
+        if (!auto) return;
+        r.NumCount.Min = 0;
+        r.NumCount.Max = MaxKeyRepeat;
+        r.NumCount.Step = 100;
+        r.NumCount.SetValue(Math.Clamp(value, 0, MaxKeyRepeat));
+    }
+
+    /// <summary>自动连按次数：0 = 无限，非法输入（空/负数）回落 0，上限 100000。</summary>
+    private static int NormalizeKeyRepeat(string text)
+    {
+        if (!int.TryParse(text?.Trim(), out int v) || v < 0) return 0;
+        return Math.Clamp(v, 0, MaxKeyRepeat);
     }
 
     /// <summary>按顺序重排所有行 + 尾部"＋ 新增一行"，行距统一 RowH。</summary>
@@ -1373,6 +1462,8 @@ public class MainForm : Form
             r.Chk.Enabled = !locked;
             r.TxtKey.Enabled = !locked;
             r.TxtMs.Enabled = !locked;
+            r.SelStop.Enabled = !locked;
+            r.NumCount.Enabled = !locked && r.SelStop.SelectedIndex == 1; // 仅自动连按有次数框
             r.LnkDel.Enabled = !locked;
         }
         btnAdd.Enabled = !locked && _rows.Count < MaxRows;

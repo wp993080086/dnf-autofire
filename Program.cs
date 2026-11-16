@@ -90,7 +90,7 @@ internal static class Program
                     g.CopyFromScreen(rect.Location, Point.Empty, rect.Size);
                 bmp.Save($"{args[2]}_{i}.png", ImageFormat.Png);
                 i++;
-                if (i < 7) return;
+                if (i < 10) return;
                 t.Stop();
                 t.Dispose();
                 form.Close();

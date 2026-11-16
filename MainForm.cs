@@ -49,7 +49,7 @@ public class MainForm : Form
     private readonly System.Windows.Forms.Timer _fadeTimer;
     private int _fadeElapsed;
     private const float VeilStartOpacity = 0.55f;
-    private const int FadeMs = 150;
+    private const int FadeMs = 300;
     private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 

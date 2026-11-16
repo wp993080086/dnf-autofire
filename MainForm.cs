@@ -585,7 +585,7 @@ public class MainForm : Form
         var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(596, 302), BackColor = Color.White };
 
         // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
-        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White, TabStop = true };
+        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White, TabStop = true, TabIndex = 0 };
         tabHeader.Paint += TabHeader_Paint;
         tabHeader.MouseClick += TabHeader_Click;
         tabHeader.MouseMove += TabHeader_Move;
@@ -613,7 +613,8 @@ public class MainForm : Form
                 Location = new Point(0, 44),
                 Size = new Size(596, 258),
                 BackColor = Color.White,
-                Visible = i == TabKeys
+                Visible = i == TabKeys,
+                TabIndex = i + 1   // 排在 tabHeader 之后：Tab 键/tab 顺序里页签始终是第一个可选控件
             };
             pnlMain.Controls.Add(_pages[i]);
         }
@@ -714,7 +715,9 @@ public class MainForm : Form
             // ComboBox 的下拉在 MouseDown 时弹出，此时 ActiveControl=null 会立刻把下拉关掉；
             // 点击输入框自身也不应清除它自己的焦点
             if (c is AntInput or AntNumber or AntSelect) continue;
-            c.MouseDown += (_, _) => ActiveControl = null;
+            // 焦点收到页签栏，而不是留空：留空时原生焦点仍停在输入框里，
+            // 最小化再还原时 Windows 会把焦点还给那个输入框
+            c.MouseDown += (_, _) => tabHeader.Focus();
             AttachClearFocus(c.Controls);
         }
     }

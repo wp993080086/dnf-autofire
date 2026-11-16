@@ -101,6 +101,36 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --focustest 复现「清焦点 → 最小化 → 还原」后的焦点归属
+        if (args.Length >= 2 && args[1] == "--focustest")
+        {
+            var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };
+            form.Show();
+            string Name() => form.ActiveControl?.GetType().Name ?? "null";
+            var steps = new List<Action>
+            {
+                () => Console.WriteLine($"[shown]     {Name()}"),
+                () => { form.ActiveControl = null; Console.WriteLine($"[cleared]   {Name()}"); },
+                () => { bool ok = form.SelectNextControl(null, true, true, true, true); Console.WriteLine($"[next]      {Name()} ok={ok}"); },
+                () => { form.WindowState = FormWindowState.Minimized; Console.WriteLine($"[minimized] {Name()}"); },
+                () => { form.WindowState = FormWindowState.Normal; Console.WriteLine($"[restored]  {Name()}"); },
+                () => { form.Activate(); Console.WriteLine($"[activated] {Name()}"); },
+                () => { form.Hide(); Console.WriteLine($"[hidden]    {Name()}"); },
+                () => { form.Show(); Console.WriteLine($"[reshown]   {Name()}"); },
+                () => { form.Close(); Application.Exit(); }
+            };
+            int k = 0;
+            var ft = new System.Windows.Forms.Timer { Interval = 400 };
+            ft.Tick += (_, _) =>
+            {
+                if (k >= steps.Count) { ft.Stop(); ft.Dispose(); return; }
+                steps[k++]();
+            };
+            ft.Start();
+            Application.Run();
+            return;
+        }
+
         // 单实例保护：双开会导致热键冲突与双重连发
         using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
         if (!createdNew)

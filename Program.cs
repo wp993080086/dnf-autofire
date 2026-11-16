@@ -131,6 +131,17 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --keytest 跑一遍「开启连发」前的键名校验并打印结果
+        if (args.Length >= 2 && args[1] == "--keytest")
+        {
+            using var ktForm = new MainForm();
+            ktForm.Show();
+            Application.DoEvents();
+            Console.WriteLine(ktForm.DebugStartCheck());
+            ktForm.Close();
+            return;
+        }
+
         // 单实例保护：双开会导致热键冲突与双重连发
         using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
         if (!createdNew)

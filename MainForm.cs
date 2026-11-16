@@ -68,6 +68,8 @@ public class MainForm : Form
     private Label lblModeTip = null!;  // 底部提示文字，随 Tab 切换
     private bool _loading = true;      // 构造/加载配置期间不触发自动保存
     private bool _hotkeySyncing;       // Tab 切换同步热键下拉框时不触发保存/重注册
+    private bool _keyFixing;           // 键名框内程序改写文本时，避免 TextChanged 递归
+    private readonly ToolTip _keyTip = new(); // 键名输入框的填写规则提示（所有行共用）
     private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
@@ -147,6 +149,7 @@ public class MainForm : Form
             _veil?.Dispose();
             _fontBold.Dispose();
             _tabFont.Dispose();
+            _keyTip.Dispose();
             _engine.Stop();
             _mouseEngine.Stop();
             UnregisterHotkeys();
@@ -178,6 +181,14 @@ public class MainForm : Form
 
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
+
+    /// <summary>调试入口：--keytest 跑一遍开启前校验，返回结果（不启动引擎、不弹窗）。</summary>
+    internal string DebugStartCheck()
+    {
+        string? err = CollectTargets(out var targets, out _, out _);
+        if (err != null) return "BLOCK: " + err.Replace("\n", " | ");
+        return $"OK targets={targets.Count} vks=[{string.Join(", ", targets.Select(t => "0x" + t.Vk.ToString("X2")))}]";
+    }
 
     /// <summary>调试入口：--fadetest 切页并走白幕淡入，供抓帧验证。</summary>
     internal void DebugShowTabFade(int index)
@@ -257,20 +268,17 @@ public class MainForm : Form
 
     private void DoStart()
     {
-        var targets = new List<AutoFireEngine.KeyTarget>();
-        foreach (var r in _rows)
+        string? error = CollectTargets(out var targets, out var badRow, out string status);
+        if (error != null)
         {
-            if (!r.Chk.Checked || string.IsNullOrWhiteSpace(r.TxtKey.Text)) continue;
-            int vk = KeyCharToVk(r.TxtKey.Text.Trim().ToUpper()[0]);
-            if (vk < 0) continue;
-            targets.Add(new AutoFireEngine.KeyTarget(
-                vk,
-                NormalizeMs(r.TxtMs.Text),
-                r.SelStop.SelectedIndex == 1 ? AutoFireEngine.TriggerMode.Auto : AutoFireEngine.TriggerMode.Hold,
-                NormalizeKeyRepeat(r.NumCount.Text)));
+            ShowWindow();
+            UpdateStatus(status);
+            MessageBox.Show(error, "无法开启", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (badRow != null) FocusKeyBox(badRow);
+            return;
         }
 
-        // 空配置拦截：没有可连发的键时不开引擎，直接引导用户去配置
+        // 一行都没勾选时不开引擎，直接引导用户去配置
         if (targets.Count == 0)
         {
             ShowWindow();
@@ -302,6 +310,53 @@ public class MainForm : Form
         trayIcon.ShowBalloonTip(1800, "DNF 连发",
             $"已开启连发（{targets.Count} 个目标键）{(autoDesc.Length > 0 ? "\n" + autoDesc : "")}\n最小化到托盘，按 {_config.StartHotkey} 或托盘菜单可关闭。",
             ToolTipIcon.Info);
+    }
+
+    /// <summary>
+    /// 收集所有已勾选行的目标键并校验：键名为空 / 不合法 / 两行同键都会返回错误文案。
+    /// 返回 null 表示校验通过。
+    /// </summary>
+    private string? CollectTargets(out List<AutoFireEngine.KeyTarget> targets,
+        out RowControls? badRow, out string status)
+    {
+        targets = new List<AutoFireEngine.KeyTarget>();
+        badRow = null;
+        status = "";
+        var used = new Dictionary<int, int>(); // VK → 行索引，用于同键冲突提示
+
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            var r = _rows[i];
+            if (!r.Chk.Checked) continue;
+
+            string text = r.TxtKey.Text.Trim().ToUpperInvariant();
+            int vk = KeyTextToVk(text);
+            // 勾选了就必须有合法键名：空或非法一律拒绝开启，不再静默跳过
+            if (vk < 0)
+            {
+                badRow = r;
+                bool empty = text.Length == 0;
+                status = empty ? $"第 {i + 1} 行未填键名，无法开启" : $"第 {i + 1} 行键名 {text} 不合法，无法开启";
+                return empty
+                    ? $"第 {i + 1} 行勾选了「启用」但没有填键名。\n请填写键名，或取消这一行的勾选。"
+                    : $"第 {i + 1} 行的键名「{text}」不合法。\n只支持 A-Z、0-9；小键盘数字用 N0-N9（例如 N5）。";
+            }
+            if (used.TryGetValue(vk, out int other))
+            {
+                badRow = r;
+                status = $"第 {i + 1} 行与第 {other + 1} 行键名重复，无法开启";
+                return $"第 {i + 1} 行与第 {other + 1} 行用了同一个键「{text}」。\n请改成不同的键，或取消其中一行的勾选。";
+            }
+            used[vk] = i;
+
+            targets.Add(new AutoFireEngine.KeyTarget(
+                vk,
+                NormalizeMs(r.TxtMs.Text),
+                r.SelStop.SelectedIndex == 1 ? AutoFireEngine.TriggerMode.Auto : AutoFireEngine.TriggerMode.Hold,
+                NormalizeKeyRepeat(r.NumCount.Text)));
+        }
+
+        return null;
     }
 
     private void DoStop()
@@ -543,7 +598,7 @@ public class MainForm : Form
 
         var keys = _config.Keys ?? new List<KeyConfig>();
         foreach (var k in keys)
-            AddRow(k.Key ?? "", ClampMs(k.IntervalMs), k.Enabled,
+            AddRow(SanitizeKeyText(k.Key), ClampMs(k.IntervalMs), k.Enabled,
                 k.StopMode == "auto" ? "auto" : "hold", k.StopValue);
         // 兜底补齐到 2 行，与默认配置语义一致：X 勾选、A 不勾选
         while (_rows.Count < 2)
@@ -1180,7 +1235,7 @@ public class MainForm : Form
             Location = new Point(58, 3),
             Size = new Size(56, 28)
         };
-        row.TxtKey.Inner.MaxLength = 1;
+        row.TxtKey.Inner.MaxLength = 2;   // 单字符 A-Z/0-9；小键盘数字为 N0-N9 两字符
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
         row.TxtKey.Text = key;
@@ -1247,6 +1302,8 @@ public class MainForm : Form
         row.TxtKey.Inner.KeyDown += KeyBox_KeyDown;
         row.TxtKey.Inner.TextChanged += KeyBox_TextChanged;
         row.TxtKey.Inner.TextChanged += (_, _) => { if (!_loading) SaveConfig(); };
+        _keyTip.SetToolTip(row.TxtKey, "支持 A-Z、0-9；小键盘数字直接按小键盘（显示为 N0-N9）");
+        _keyTip.SetToolTip(row.TxtKey.Inner, "支持 A-Z、0-9；小键盘数字直接按小键盘（显示为 N0-N9）");
         row.TxtMs.Inner.KeyPress += MsBox_KeyPress;
         row.TxtMs.Inner.Leave += MsBox_Leave;
         row.TxtMs.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
@@ -1347,24 +1404,69 @@ public class MainForm : Form
         pnlContent.Top = -scrollBar.Offset;
     }
 
+    /// <summary>把指定行滚到可见区并聚焦其键名框（校验不通过时用来引导用户）。</summary>
+    private void FocusKeyBox(RowControls row)
+    {
+        int idx = _rows.IndexOf(row);
+        if (idx < 0) return;
+        int top = idx * RowH;
+        if (top < scrollBar.Offset)
+            scrollBar.SetOffset(top);
+        else if (top + RowH > scrollBar.Offset + pnlRows.Height)
+            scrollBar.SetOffset(Math.Min(top + RowH - pnlRows.Height, scrollBar.MaxOffset()));
+        row.TxtKey.Inner.Focus();
+        row.TxtKey.Inner.SelectAll();
+    }
+
     // ---------- 输入校验 ----------
 
+    /// <summary>键名键入：只放行 A-Z / 0-9；已有一个字符时若无法组成合法两字符键名，用新字符整体替换。</summary>
     private void KeyBox_KeyPress(object? sender, KeyPressEventArgs e)
     {
+        if (sender is not TextBox txt) return;
         char c = e.KeyChar;
         if (char.IsControl(c)) return; // 退格等
-        if (c >= 'a' && c <= 'z') c = char.ToUpper(c);
-        if (c is >= 'A' and <= 'Z' or >= '0' and <= '9')
+        if (c >= 'a' && c <= 'z') c = char.ToUpperInvariant(c);
+
+        if (!(c is >= 'A' and <= 'Z' or >= '0' and <= '9'))
         {
-            e.KeyChar = c;
+            e.Handled = true; // 符号、空格、中文一律吞掉
+            UpdateStatus("键名只能是 A-Z、0-9；小键盘数字用 N0-N9");
             return;
         }
-        e.Handled = true; // 仅允许 A-Z、0-9
+
+        // 唯一合法两字符形态是「N + 数字」（小键盘），其余情况一律整体替换而非拼接
+        string cur = txt.SelectionLength > 0 ? "" : txt.Text;
+        bool append = cur.Length == 1 && cur[0] == 'N' && c is >= '0' and <= '9';
+        if (append) txt.SelectionStart = txt.TextLength; // 光标可能停在 N 之前，强制追加到末尾
+        if (cur.Length > 0 && !append)
+        {
+            _keyFixing = true;
+            txt.Clear();
+            _keyFixing = false;
+        }
+        e.KeyChar = c;
     }
 
     private void KeyBox_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Delete && sender is TextBox txt)
+        if (sender is not TextBox txt) return;
+        int code = (int)e.KeyCode;
+
+        // 小键盘数字：直接存成 N0-N9，与主键盘数字（VK 0x30-0x39）区分开
+        if (code >= (int)Keys.NumPad0 && code <= (int)Keys.NumPad9)
+        {
+            _keyFixing = true;
+            txt.Text = "N" + (code - (int)Keys.NumPad0);
+            txt.SelectionStart = txt.TextLength;
+            _keyFixing = false;
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            if (!_loading) SaveConfig();
+            return;
+        }
+
+        if (e.KeyCode == Keys.Delete)
         {
             txt.Clear(); // Delete 清空该行键名
             e.Handled = true;
@@ -1374,17 +1476,41 @@ public class MainForm : Form
 
     private void KeyBox_TextChanged(object? sender, EventArgs e)
     {
-        if (sender is not TextBox txt || string.IsNullOrEmpty(txt.Text)) return;
-        string value = txt.Text.Trim().ToUpper();
-        if (value.Length == 0) return;
+        if (_keyFixing || sender is not TextBox txt) return;
+        if (txt.Text.Length == 0) return;
+
+        // 规范化为大写（含粘贴进来的小写字符）
+        string value = txt.Text.Trim().ToUpperInvariant();
+        if (value != txt.Text)
+        {
+            _keyFixing = true;
+            txt.Text = value;
+            txt.SelectionStart = value.Length;
+            _keyFixing = false;
+        }
+
+        // 非法形态（如粘贴 "X5"、"1A"）→ 清空
+        if (KeyTextToVk(value) < 0)
+        {
+            _keyFixing = true;
+            txt.Clear();
+            _keyFixing = false;
+            UpdateStatus("键名不合法，已清空（允许 A-Z、0-9，小键盘用 N0-N9）");
+            return;
+        }
+
+        if (value == "N") return; // 可能是输入 N5 的中间态，重复检查留到开启时
 
         // 与其他行键名重复 → 直接置空本行
+        int vk = KeyTextToVk(value);
         foreach (var r in _rows)
         {
             if (ReferenceEquals(r.TxtKey.Inner, txt)) continue;
-            if (r.TxtKey.Text.Trim().ToUpper() == value)
+            if (KeyTextToVk(r.TxtKey.Text) == vk)
             {
+                _keyFixing = true;
                 txt.Clear();
+                _keyFixing = false;
                 UpdateStatus("键名 " + value + " 与其他行重复，已置空");
                 return;
             }
@@ -1440,8 +1566,31 @@ public class MainForm : Form
         return Math.Clamp(v, MouseMinMs, MouseMaxMs);
     }
 
-    private static int KeyCharToVk(char c) =>
-        c is >= 'A' and <= 'Z' or >= '0' and <= '9' ? c : -1;
+    /// <summary>
+    /// 键名文本 → 虚拟键码。单字符 A-Z / 0-9 直接取字符码（VK_A=0x41、VK_0=0x30）；
+    /// 两字符 N0-N9 表示小键盘数字（VK_NUMPAD0=0x60）。返回 -1 表示非法。
+    /// </summary>
+    private static int KeyTextToVk(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return -1;
+        string s = text.Trim().ToUpperInvariant();
+        if (s.Length == 1)
+        {
+            char c = s[0];
+            return c is >= 'A' and <= 'Z' or >= '0' and <= '9' ? c : -1;
+        }
+        if (s.Length == 2 && s[0] == 'N' && s[1] is >= '0' and <= '9')
+            return 0x60 + (s[1] - '0');
+        return -1;
+    }
+
+    /// <summary>读取配置时规范化键名：大写；非法（旧版本或手改坏的值）一律回落为空，等用户重填。</summary>
+    private static string SanitizeKeyText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        string s = text.Trim().ToUpperInvariant();
+        return KeyTextToVk(s) >= 0 ? s : "";
+    }
 
     private static int HotkeyStringToVk(string s)
     {

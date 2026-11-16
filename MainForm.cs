@@ -42,6 +42,14 @@ public class MainForm : Form
     private float _animT = 1f;             // 0~1，>=1 表示无动画
     private readonly int[] _tabWidths = new int[TabTitles.Length];     // 页签命中区宽度（文字宽 + 左右留白），构造时测量
     private readonly int[] _tabTextWidths = new int[TabTitles.Length]; // 纯文字宽度，下划线据此对称收短
+    private int _underlineWidth;  // 所有页签共用的下划线宽度（取最短文字宽），保证长度一致
+
+    // 页面切换白幕淡入（WinForms 子控件不支持逐像素 alpha，用分层窗口铺一层白幕实现）
+    private FadeVeil? _veil;
+    private readonly System.Windows.Forms.Timer _fadeTimer;
+    private int _fadeElapsed;
+    private const float VeilStartOpacity = 0.55f;
+    private const int FadeMs = 150;
     private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 
@@ -82,6 +90,9 @@ public class MainForm : Form
         // Tab 下划线滑动动画
         _tabAnimTimer = new System.Windows.Forms.Timer { Interval = 15 };
         _tabAnimTimer.Tick += TabAnim_Tick;
+        // 页面切换白幕淡入
+        _fadeTimer = new System.Windows.Forms.Timer { Interval = 15 };
+        _fadeTimer.Tick += Fade_Tick;
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
         for (int i = 0; i < TabTitles.Length; i++)
@@ -89,6 +100,11 @@ public class MainForm : Form
             _tabTextWidths[i] = TextRenderer.MeasureText(TabTitles[i], _tabFont).Width;
             _tabWidths[i] = _tabTextWidths[i] + 16;
         }
+        // 下划线统一宽度：取最短页签的文字宽再左右各收 4px，长度不随文字多少变化
+        int minTextWidth = int.MaxValue;
+        for (int i = 0; i < TabTitles.Length; i++)
+            minTextWidth = Math.Min(minTextWidth, _tabTextWidths[i]);
+        _underlineWidth = Math.Max(12, minTextWidth - 8);
 
         try
         {
@@ -117,6 +133,8 @@ public class MainForm : Form
         {
             Application.RemoveMessageFilter(_wheelFilter);
             _tabAnimTimer.Dispose();
+            _fadeTimer.Dispose();
+            _veil?.Dispose();
             _fontBold.Dispose();
             _tabFont.Dispose();
             _engine.Stop();
@@ -150,6 +168,17 @@ public class MainForm : Form
 
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
+
+    /// <summary>调试入口：--fadetest 切页并走白幕淡入，供抓帧验证。</summary>
+    internal void DebugShowTabFade(int index)
+    {
+        DebugShowTab(index);
+        BeginPageFade();
+    }
+
+    /// <summary>调试入口：当前页在屏幕上的矩形（抓帧用，跟随页面尺寸变化）。</summary>
+    internal Rectangle DebugPageScreenRect() =>
+        new(_pages[_tabIndex].PointToScreen(Point.Empty), _pages[_tabIndex].Size);
 
     /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
     internal void DebugEngineTest(string mode, int seconds)
@@ -401,6 +430,15 @@ public class MainForm : Form
             return;
         }
         base.OnFormClosing(e);
+    }
+
+    /// <summary>主窗口隐藏（最小化到托盘）时立刻收起白幕，避免屏幕上残留一块白色浮层。</summary>
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if (Visible || _veil == null || _veil.IsDisposed) return;
+        _fadeTimer.Stop();
+        _veil.Hide();
     }
 
     private void ExitApp()
@@ -717,12 +755,12 @@ public class MainForm : Form
         }
     }
 
-    /// <summary>下划线：以文字宽度为基准左右各收 4px，并在页签内水平居中，避免比文字宽出一截。</summary>
+    /// <summary>下划线：宽度统一（_underlineWidth），在页签内水平居中，长度不随文字多少变化。</summary>
     private Rectangle UnderlineOf(int index)
     {
         if (index < 0 || index >= _tabRects.Count) return Rectangle.Empty;
         var rect = _tabRects[index].Rect;
-        int w = Math.Max(12, Math.Min(_tabTextWidths[index], rect.Width) - 8);
+        int w = Math.Min(_underlineWidth, rect.Width);
         return new Rectangle(rect.X + (rect.Width - w) / 2, 41, w, 3);
     }
 
@@ -743,6 +781,7 @@ public class MainForm : Form
 
         for (int i = 0; i < _pages.Length; i++)
             _pages[i].Visible = i == idx;
+        BeginPageFade();  // 新页面从白幕里淡入
         tabHeader.Invalidate();
         RefreshRunCard(); // 主按钮与"当前控制"标识跟随 Tab 切换
         SyncHotkeyUI();   // 热键下拉框跟随 Tab
@@ -791,6 +830,40 @@ public class MainForm : Form
     }
 
     private static int Lerp(int a, int b, float t) => a + (int)Math.Round((b - a) * t);
+
+    /// <summary>
+    /// 页面切换的白幕淡入：在页面区域盖一层白色蒙层，透明度从 55% 递减到 0。
+    /// 子控件画不出真正的 alpha（GDI 会丢弃），所以白幕只能是独立的无激活顶层窗口。
+    /// </summary>
+    private void BeginPageFade()
+    {
+        var page = _pages[_tabIndex];
+        if (_veil == null || _veil.IsDisposed)
+            _veil = new FadeVeil { Owner = this };
+        _veil.Bounds = new Rectangle(page.PointToScreen(Point.Empty), page.Size);
+        _veil.Opacity = VeilStartOpacity;
+        _veil.Show();
+        _fadeElapsed = 0;
+        _fadeTimer.Start();
+    }
+
+    private void Fade_Tick(object? sender, EventArgs e)
+    {
+        if (_veil == null || _veil.IsDisposed || !Visible)
+        {
+            _fadeTimer.Stop();
+            return;
+        }
+        _fadeElapsed += _fadeTimer.Interval;
+        float t = Math.Min(1f, (float)_fadeElapsed / FadeMs);
+        t = t * t * (3 - 2 * t); // smoothstep：起止更柔和
+        _veil.Opacity = VeilStartOpacity * (1 - t);
+        if (t >= 1f)
+        {
+            _fadeTimer.Stop();
+            _veil.Hide();
+        }
+    }
 
     private void TabHeader_Move(object? sender, MouseEventArgs e)
     {
@@ -1346,5 +1419,36 @@ public class MainForm : Form
     private sealed class TabHeaderPanel : Panel
     {
         public TabHeaderPanel() => SetStyle(ControlStyles.Selectable, true);
+    }
+
+    /// <summary>
+    /// 页面切换用的白色蒙层：无边框、不在任务栏、不抢焦点、鼠标点击穿透。
+    /// 只有顶层窗口能整体半透明（Form.Opacity 走分层窗口），普通子控件做不到。
+    /// </summary>
+    private sealed class FadeVeil : Form
+    {
+        public FadeVeil()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Color.White;
+            Opacity = VeilStartOpacity;
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                const int WS_EX_NOACTIVATE = 0x08000000; // 不抢焦点
+                const int WS_EX_TRANSPARENT = 0x00000020; // 点击穿透，不挡下面的控件
+                const int WS_EX_TOOLWINDOW = 0x00000080; // 不进 Alt+Tab
+                var cp = base.CreateParams;
+                cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
+                return cp;
+            }
+        }
     }
 }

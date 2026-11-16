@@ -65,6 +65,42 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --fadetest <prefix> 切页并按 40ms 连续抓帧，验证白幕淡入
+        if (args.Length >= 3 && args[1] == "--fadetest")
+        {
+            var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };
+            form.Show();
+            var rect = form.DebugPageScreenRect();
+            // 等窗口出现动画/首帧绘制结束，再切页抓帧，否则抓到的是窗口出现动画
+            var warm = new System.Windows.Forms.Timer { Interval = 500 };
+            int i = 0;
+            var t = new System.Windows.Forms.Timer { Interval = 40 };
+            warm.Tick += (_, _) =>
+            {
+                warm.Stop();
+                warm.Dispose();
+                form.Activate();
+                form.DebugShowTabFade(1);
+                t.Start();
+            };
+            t.Tick += (_, _) =>
+            {
+                using var bmp = new Bitmap(rect.Width, rect.Height);
+                using (var g = Graphics.FromImage(bmp))
+                    g.CopyFromScreen(rect.Location, Point.Empty, rect.Size);
+                bmp.Save($"{args[2]}_{i}.png", ImageFormat.Png);
+                i++;
+                if (i < 7) return;
+                t.Stop();
+                t.Dispose();
+                form.Close();
+                Application.Exit();
+            };
+            warm.Start();
+            Application.Run();
+            return;
+        }
+
         // 单实例保护：双开会导致热键冲突与双重连发
         using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
         if (!createdNew)

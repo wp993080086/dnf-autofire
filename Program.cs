@@ -44,6 +44,16 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --recordtest <秒> <png> 自动开始录制、抓悬浮条、到时停止并退出
+        if (args.Length >= 4 && args[1] == "--recordtest")
+        {
+            var form = new MainForm();
+            form.Show();
+            form.DebugRecordTest(int.TryParse(args[2], out int rsec) ? rsec : 2, args[3]);
+            Application.Run(form);
+            return;
+        }
+
         // 调试用：dnf-autofire --mouselayout 打印鼠标页行内控件边界
         if (args.Length >= 2 && args[1] == "--mouselayout")
         {

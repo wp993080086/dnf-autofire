@@ -3,18 +3,28 @@ using System.Runtime.InteropServices;
 namespace DnfAutoFire;
 
 /// <summary>
-/// 低级鼠标钩子。只监听物理鼠标键（过滤程序自身注入的点击），
-/// 处理程序调用 SuppressCurrent() 可吞掉当前这个原生鼠标键。
-/// 事件参数为鼠标键码：1=左键 2=右键 4=滚轮按下中键（VK_LBUTTON / VK_RBUTTON / VK_MBUTTON）。
+/// 低级鼠标钩子。只监听物理鼠标事件（过滤程序自身注入的），
+/// 处理程序调用 SuppressCurrent() 可吞掉当前这个原生鼠标消息。
+/// 两套事件：
+/// <list type="bullet">
+/// <item><c>ButtonDown/ButtonUp</c>：只报鼠标键，参数为 VK 键码（1=左 2=右 4=滚轮按下），给连点引擎用；</item>
+/// <item><c>Raw</c>：报所有消息（移动 + 按键）连同物理坐标与时间戳，给轨迹录制用。</item>
+/// </list>
 /// </summary>
 internal sealed class MouseHook : IDisposable
 {
+    /// <summary>一条原始鼠标消息（已过滤注入事件）。</summary>
+    public readonly record struct RawEvent(int Msg, int X, int Y, uint Time);
+
     private NativeMethods.LowLevelHookProc _proc = null!;
     private IntPtr _hook = IntPtr.Zero;
     private bool _suppress;
 
     public event Action<int>? ButtonDown;
     public event Action<int>? ButtonUp;
+
+    /// <summary>所有物理鼠标消息（含 WM_MOUSEMOVE）。录制期间每个事件都会触发，回调内必须极轻。</summary>
+    public event Action<RawEvent>? Raw;
 
     public void Install()
     {
@@ -34,10 +44,12 @@ internal sealed class MouseHook : IDisposable
         if (nCode >= 0)
         {
             var s = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
-            // 程序自己 SendInput 的点击带 injected 标志，直接放行，避免自我触发死循环
+            // 程序自己 SendInput 的事件带 injected 标志，直接放行，避免自我触发死循环
             if ((s.flags & NativeMethods.LLMHF_ANY_INJECTED) == 0)
             {
                 int msg = wParam.ToInt32();
+                if (Raw != null) Raw(new RawEvent(msg, s.pt.X, s.pt.Y, s.time));
+
                 int? button = msg switch
                 {
                     NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_LBUTTONUP

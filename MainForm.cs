@@ -5,6 +5,7 @@ public class MainForm : Form
     private const int WM_HOTKEY = 0x0312;
     private const int HOTKEY_ID_START = 1;  // 按键连发热键
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
+    private const int HOTKEY_ID_RECORD = 3; // 录制热键
     private const int MinMs = 50;
     private const int MaxMs = 5000;
     private const int MouseMinMs = 100;      // 鼠标连点间隔下限
@@ -14,6 +15,8 @@ public class MainForm : Form
     private const int RowH = 34;
     private const int RowWidth = 544;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
+    private const int RecRowH = 30;        // 录制方案列表行高
+    private const int RecListHeight = 120; // 方案列表可视高度（正好 4 行，超出滚动，不留半行）
 
     // Tab 索引与标题：页面顺序 = Tab 顺序，加页只改这里与 BuildUi 的构建调用
     private const int TabKeys = 0;
@@ -58,6 +61,21 @@ public class MainForm : Form
     private Panel pnlContent = null!;   // 行内容容器，滚动时整体位移
     private FlatScrollBar scrollBar = null!;
     private AntButton btnAdd = null!;
+
+    // 录制页
+    private readonly List<RecordProfile> _profiles = new();
+    private readonly List<Panel> _recRowPanels = new();
+    private readonly List<(RecordProfile Profile, AntCheckBox Chk)> _recSelection = new();
+    private Panel pnlRecRows = null!;
+    private Panel pnlRecContent = null!;
+    private FlatScrollBar recScroll = null!;
+    private AntButton btnRecord = null!;
+    private Label lblRecStatus = null!;
+    private Label lblRecEmpty = null!;
+    private MacroRecorder? _recorder;
+    private RecordOverlayForm? _overlay;
+    private string _selectedProfileId = "";
+
     private AntButton btnMain = null!;      // 唯一主按钮：控制当前 Tab 对应的引擎
     private Label lblTarget = null!;        // "当前控制：按键连发/鼠标连点" 标识
     private Label lblStatus = null!;
@@ -72,6 +90,7 @@ public class MainForm : Form
     private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
+    private ToolStripMenuItem trayRecordItem = null!;
 
     public MainForm()
     {
@@ -120,6 +139,12 @@ public class MainForm : Form
         }
         LoadConfigToUi();
         _loading = false; // 之后任何配置变化都自动保存
+
+        // 录制方案：独立文件 recordings.json，读失败回落空库（绝不覆盖原文件）
+        _profiles.AddRange(RecordStore.Load());
+        // 启动时默认选中第一个方案，省一次点击（回放/删除都以选中项为目标）
+        if (_selectedProfileId.Length == 0 && _profiles.Count > 0) _selectedProfileId = _profiles[0].Id;
+        RebuildRecordList();
 
         btnMain.Click += (_, _) => ToggleCurrentEngine();
         btnAdd.Click += (_, _) => AddEmptyRow();
@@ -252,6 +277,41 @@ public class MainForm : Form
         t.Start();
     }
 
+    /// <summary>调试入口：--recordtest &lt;秒&gt; &lt;png&gt; 自动开录、抓悬浮条、停止并退出（验证录制链路与悬浮条绘制）。</summary>
+    internal void DebugRecordTest(int seconds, string pngPath)
+    {
+        var t = new System.Windows.Forms.Timer { Interval = 700 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            StartRecording();
+            var cap = new System.Windows.Forms.Timer { Interval = 900 };
+            cap.Tick += (_, _) =>
+            {
+                cap.Stop();
+                if (_overlay != null && !_overlay.IsDisposed)
+                {
+                    var b = _overlay.Bounds;
+                    using var bmp = new Bitmap(b.Width, b.Height);
+                    using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+                    bmp.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                    Logger.Info($"[recordtest] 悬浮条 {b} → {pngPath}");
+                }
+                var stop = new System.Windows.Forms.Timer { Interval = Math.Max(500, seconds * 1000) };
+                stop.Tick += (_, _) =>
+                {
+                    stop.Stop();
+                    StopRecording();
+                    Logger.Info($"[recordtest] 结束：profiles={_profiles.Count} recorder={(_recorder == null ? "null" : "running")}");
+                    Close();
+                };
+                stop.Start();
+            };
+            cap.Start();
+        };
+        t.Start();
+    }
+
     /// <summary>
     /// 调试入口：--uitest &lt;prefix&gt;。窗口全程可见，模拟"进入运行态→回到停止态"的按钮状态切换
     /// （与热键关闭完全相同的 UI 更新路径），用 PrintWindow 抓真实画面验证自绘按钮是否即时重绘。
@@ -303,6 +363,8 @@ public class MainForm : Form
 
     private void DoStart()
     {
+        if (RefuseWhileRecording()) return;
+
         string? error = CollectTargets(out var targets, out var badRow, out string status);
         if (error != null)
         {
@@ -420,6 +482,8 @@ public class MainForm : Form
 
     private void DoMouseStart()
     {
+        if (RefuseWhileRecording()) return;
+
         var targets = new List<MouseClickEngine.MouseTarget>();
         foreach (var r in _mouseRows)
         {
@@ -587,6 +651,8 @@ public class MainForm : Form
 
     private void ExitApp()
     {
+        // 录制中退出：先把已采到的轨迹落盘，再关窗
+        if (_recorder != null) StopRecording();
         _exiting = true;
         Close();
     }
@@ -605,6 +671,9 @@ public class MainForm : Form
                 case HOTKEY_ID_MOUSE:
                     if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
                     break;
+                case HOTKEY_ID_RECORD:
+                    ToggleRecording();
+                    break;
             }
         }
     }
@@ -619,6 +688,8 @@ public class MainForm : Form
         {
             StartHotkey = _tabIndex == TabKeys ? cboStartKey.Text : _config.StartHotkey,
             MouseStartHotkey = _tabIndex == TabMouse ? cboStartKey.Text : _config.MouseStartHotkey,
+            RecordHotkey = _tabIndex == TabRecord ? cboStartKey.Text : _config.RecordHotkey,
+            PlaybackHotkey = _config.PlaybackHotkey,
             Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
             Keys = _rows.Select(r => new KeyConfig
             {
@@ -707,10 +778,13 @@ public class MainForm : Form
         bool okKeys = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_START, 0, (uint)HotkeyStringToVk(_config.StartHotkey));
         // 连点热键（鼠标页配置，默认 F8）
         bool okMouse = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_MOUSE, 0, (uint)HotkeyStringToVk(_config.MouseStartHotkey));
+        // 录制热键（录制页配置，默认 F9）
+        bool okRecord = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_RECORD, 0, (uint)HotkeyStringToVk(_config.RecordHotkey));
 
         var failed = new List<string>();
         if (!okKeys) failed.Add(_config.StartHotkey);
         if (!okMouse) failed.Add(_config.MouseStartHotkey);
+        if (!okRecord) failed.Add(_config.RecordHotkey);
         if (failed.Count > 0)
         {
             string names = string.Join("、", failed);
@@ -724,6 +798,7 @@ public class MainForm : Form
         if (!IsHandleCreated) return;
         NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_START);
         NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_MOUSE);
+        NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_RECORD);
     }
 
     // ---------- UI 构建 ----------
@@ -941,7 +1016,7 @@ public class MainForm : Form
 
     /// <summary>
     /// 设置卡片跟随当前 Tab：按键页=连发热键 + 连发模式 + 键盘提示；
-    /// 鼠标页=连点热键 + 鼠标提示（无模式概念）；录制页=录制热键占位（功能未实现，仅展示不可编辑）。
+    /// 鼠标页=连点热键 + 鼠标提示（无模式概念）；录制页=录制热键 + 录制提示。
     /// </summary>
     private void SyncHotkeyUI()
     {
@@ -950,15 +1025,15 @@ public class MainForm : Form
 
         lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连发热键";
         _hotkeySyncing = true;
-        cboStartKey.Text = record ? "F9" : mouse ? _config.MouseStartHotkey : _config.StartHotkey;
-        cboStartKey.Enabled = !record;   // 录制热键在录制功能落地前不可编辑，避免写入无效配置
+        cboStartKey.Text = record ? _config.RecordHotkey : mouse ? _config.MouseStartHotkey : _config.StartHotkey;
+        cboStartKey.Enabled = _recorder == null;  // 录制中不允许改热键
         _hotkeySyncing = false;
 
         // 连发模式是按键页专属设置，鼠标页与录制页隐藏
         lblMode.Visible = !mouse && !record;
         cboMode.Visible = !mouse && !record;
         lblModeTip.Text = record
-            ? "轨迹录制与回放尚未实现，录制热键暂不可编辑"
+            ? "录制热键全局开始/结束录制，与连发/连点独立"
             : mouse
                 ? "连点热键全局开关鼠标连点，与连发热键相互独立"
                 : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
@@ -1198,38 +1273,346 @@ public class MainForm : Form
         page.Controls.Add(lblHint);
     }
 
-    /// <summary>录制页（占位）：轨迹录制与回放尚未实现，先建立页面与 Tab 位，后续版本填充方案列表与回放设置。</summary>
+    /// <summary>录制页：方案列表（单选 + 行内改名 + 删除）+ 开始/停止录制。</summary>
     private void BuildRecordPage(Control page)
     {
         var lblTitle = new Label
         {
             Text = "鼠标录制回放",
-            Location = new Point(16, 12),
+            Location = new Point(16, 8),
             AutoSize = true,
             ForeColor = AntStyle.TextPri,
             Font = new Font(AntStyle.FontName, 9.5f)
         };
         page.Controls.Add(lblTitle);
 
-        var lblEmpty = new Label
+        // 方案列表：行高 30，超过 3 行出现滚动条（最多 10 个方案）
+        pnlRecRows = new Panel
         {
-            Text = "轨迹录制与回放功能开发中",
-            Location = new Point(16, 52),
+            Location = new Point(16, 30),
+            Size = new Size(RowWidth + 12, RecListHeight),
+            BackColor = Color.White
+        };
+        recScroll = new FlatScrollBar
+        {
+            Location = new Point(pnlRecRows.Width - 8, 0),
+            Size = new Size(8, pnlRecRows.Height),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        recScroll.OffsetChanged += off => pnlRecContent.Top = -off;
+        pnlRecContent = new Panel
+        {
+            Location = new Point(0, 0),
+            Size = new Size(RowWidth, RecListHeight),
+            BackColor = Color.White
+        };
+        pnlRecRows.Controls.Add(pnlRecContent);
+        pnlRecRows.Controls.Add(recScroll);
+        page.Controls.Add(pnlRecRows);
+
+        lblRecEmpty = new Label
+        {
+            Text = "还没有录制方案：点下方「开始录制」录一个（最多 10 个）",
+            Location = new Point(0, 50),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 9f)
+            BackColor = Color.White
         };
-        page.Controls.Add(lblEmpty);
+        pnlRecRows.Controls.Add(lblRecEmpty);
+        lblRecEmpty.BringToFront();
+
+        btnRecord = new AntButton
+        {
+            Kind = AntButton.AntKind.Primary,
+            Text = "● 开始录制",
+            Location = new Point(16, RecListHeight + 38),
+            Size = new Size(112, 30)
+        };
+        btnRecord.Click += (_, _) => ToggleRecording();
+        page.Controls.Add(btnRecord);
+
+        lblRecStatus = new Label
+        {
+            Text = "未录制",
+            Location = new Point(136, RecListHeight + 44),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary
+        };
+        page.Controls.Add(lblRecStatus);
 
         var lblHint = new Label
         {
-            Text = "将支持：录制鼠标轨迹与点击存为多个方案（方案A、方案B…），回放 N 次 / 一直放 / 定时 N 分钟。",
-            Location = new Point(16, 80),
+            Text = $"录制时主窗口收进托盘，屏幕右下角留一条状态条（可拖动）；上限 {MacroRecorder.MaxDurationMs / 60000} 分钟 / {MacroRecorder.MaxPoints} 点。F9 开始或结束录制。",
+            Location = new Point(16, RecListHeight + 78),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
         page.Controls.Add(lblHint);
+    }
+
+    /// <summary>重建方案列表（≤10 行，成本极低，改名/删除后整体重建最省心）。</summary>
+    private void RebuildRecordList()
+    {
+        foreach (var p in _recRowPanels) p.Dispose();
+        _recRowPanels.Clear();
+        _recSelection.Clear();
+        pnlRecContent.Controls.Clear();
+
+        for (int i = 0; i < _profiles.Count; i++)
+        {
+            var profile = _profiles[i];
+            var row = new Panel
+            {
+                Location = new Point(0, i * RecRowH),
+                Size = new Size(RowWidth, RecRowH),
+                BackColor = Color.White
+            };
+
+            var chk = new AntCheckBox
+            {
+                Text = "",
+                Checked = profile.Id == _selectedProfileId,
+                Location = new Point(0, 0),
+                Size = new Size(24, RecRowH)
+            };
+            chk.CheckedChanged += (_, _) => OnProfileChecked(profile, chk);
+
+            var name = new AntInput
+            {
+                Location = new Point(26, 1),
+                Size = new Size(140, 28)
+            };
+            name.Inner.MaxLength = 20;
+            name.Text = profile.Name;
+            name.Inner.Leave += (_, _) => RenameProfile(profile, name);
+            name.Inner.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                e.SuppressKeyPress = true;
+                tabHeader.Focus(); // 触发 Leave → 落盘
+            };
+
+            var summary = new Label
+            {
+                Text = profile.Summary,
+                Location = new Point(176, 6),
+                AutoSize = true,
+                ForeColor = AntStyle.TextSec
+            };
+
+            var del = new AntButton
+            {
+                Kind = AntButton.AntKind.Text,
+                Danger = true,
+                Text = "删除",
+                Location = new Point(RowWidth - 54, 2),
+                Size = new Size(44, 26)
+            };
+            del.Click += (_, _) => DeleteProfile(profile);
+
+            row.Controls.AddRange(new Control[] { chk, name, summary, del });
+            pnlRecContent.Controls.Add(row);
+            _recRowPanels.Add(row);
+            _recSelection.Add((profile, chk));
+        }
+
+        int contentH = Math.Max(RecRowH, _profiles.Count * RecRowH);
+        pnlRecContent.Height = contentH;
+        recScroll.SetMetrics(contentH, pnlRecRows.Height);
+        pnlRecContent.Top = -recScroll.Offset;
+
+        lblRecEmpty.Visible = _profiles.Count == 0;
+        lblRecEmpty.BringToFront();
+        UpdateRecordUi();
+    }
+
+    /// <summary>单选：点已选中的方案不会取消勾选（等价单选按钮）。</summary>
+    private void OnProfileChecked(RecordProfile profile, AntCheckBox chk)
+    {
+        if (!chk.Checked)
+        {
+            chk.Checked = true; // 不允许通过再次点击取消，只有切换才能改变选中
+            return;
+        }
+        if (_selectedProfileId == profile.Id) return;
+        _selectedProfileId = profile.Id;
+        foreach (var (p, c) in _recSelection)
+            if (p.Id != profile.Id && c.Checked) c.Checked = false;
+    }
+
+    private void RenameProfile(RecordProfile profile, AntInput input)
+    {
+        if (_recorder != null) return;
+        string name = (input.Text ?? "").Trim();
+        if (name.Length == 0) name = profile.Name;      // 空名不覆盖，回填原值
+        if (name == profile.Name) { input.Text = name; return; }
+        profile.Name = name;
+        input.Text = name;
+        if (SaveProfiles()) UpdateStatus("已重命名为 " + name);
+    }
+
+    private void DeleteProfile(RecordProfile profile)
+    {
+        if (_recorder != null) return;
+        _profiles.Remove(profile);
+        if (_selectedProfileId == profile.Id) _selectedProfileId = "";
+        SaveProfiles();
+        RebuildRecordList();
+        UpdateStatus("已删除 " + profile.Name);
+    }
+
+    private bool SaveProfiles()
+    {
+        try
+        {
+            RecordStore.Save(_profiles);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("RecordStore.Save", ex);
+            UpdateStatus("方案保存失败：" + ex.Message);
+            return false;
+        }
+    }
+
+    // ---------- 录制 ----------
+
+    /// <summary>录制期间拒绝开启连发/连点：注入事件会污染轨迹，连点拦截还会吞掉真实点击。</summary>
+    private bool RefuseWhileRecording()
+    {
+        if (_recorder == null) return false;
+        ShowWindow();
+        MessageBox.Show("正在录制轨迹，请先结束录制（点右下角状态条的■或按录制热键）。", "提示",
+            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return true;
+    }
+
+    private void ToggleRecording()
+    {
+        if (_recorder != null) StopRecording();
+        else StartRecording();
+    }
+
+    private void StartRecording()
+    {
+        if (_recorder != null) return;
+
+        // 录制期间不能有注入引擎在跑：注入事件虽然带 injected 标志会被过滤，
+        // 但连点拦截会吞掉真实点击，轨迹会缺事件
+        if (_engine.Running || _mouseEngine.Running)
+        {
+            ShowWindow();
+            MessageBox.Show("连发或连点正在运行，请先关闭再录制。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (_profiles.Count >= RecordStore.MaxProfiles)
+        {
+            ShowWindow();
+            MessageBox.Show($"方案已满 {RecordStore.MaxProfiles} 个，请先删除旧方案。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            var recorder = new MacroRecorder();
+            var overlay = new RecordOverlayForm(recorder);
+            _recorder = recorder;
+            _overlay = overlay;
+            overlay.StopRequested += StopRecording;
+            overlay.BoundsMoved += () => _recorder?.UpdateExclude(overlay.ExcludeBounds);
+            overlay.Show();
+            recorder.Start(overlay.ExcludeBounds); // 悬浮条区域整块排除，点■/拖它都不会进轨迹
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("StartRecording", ex);
+            _overlay?.CloseSilently();
+            _overlay = null;
+            _recorder?.Dispose();
+            _recorder = null;
+            UpdateRecordUi();
+            MessageBox.Show("开始录制失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        Logger.Info("开始录制轨迹");
+        UpdateRecordUi();
+        Hide(); // 主窗口收进托盘，屏幕只留状态条
+        trayIcon.ShowBalloonTip(1600, "轨迹录制",
+            $"录制中，结束后点状态条的■或按 {_config.RecordHotkey}。", ToolTipIcon.Info);
+    }
+
+    private void StopRecording()
+    {
+        if (_recorder == null) return;
+        var recorder = _recorder;
+        var overlay = _overlay;
+        _recorder = null;
+        _overlay = null;
+
+        RecordProfile profile;
+        try
+        {
+            profile = recorder.Stop();
+        }
+        finally
+        {
+            recorder.Dispose();
+        }
+
+        if (overlay != null)
+        {
+            overlay.StopRequested -= StopRecording;
+            overlay.CloseSilently();
+        }
+        ShowWindow();
+
+        if (profile.Points.Count > 0)
+        {
+            profile.Name = RecordStore.NextName(_profiles);
+            _profiles.Add(profile);
+            _selectedProfileId = profile.Id; // 录完自动选中，方便直接回放
+            SaveProfiles();
+            RebuildRecordList();
+            Logger.Info($"录制完成：{profile.Name} {profile.Summary}");
+            trayIcon.ShowBalloonTip(2000, "轨迹录制",
+                $"已保存 {profile.Name}：{profile.Summary}", ToolTipIcon.Info);
+        }
+        else
+        {
+            RebuildRecordList();
+            Logger.Info("录制结束但没有采样点，已丢弃");
+            trayIcon.ShowBalloonTip(1500, "轨迹录制", "没有采到轨迹，本次已丢弃。", ToolTipIcon.Warning);
+        }
+        UpdateRecordUi();
+    }
+
+    /// <summary>录制/回放状态与按钮文案、列表锁定统一在这里收口（所有入口都调它）。</summary>
+    private void UpdateRecordUi()
+    {
+        bool rec = _recorder != null;
+        btnRecord.Text = rec ? "■ 停止录制" : "● 开始录制";
+        btnRecord.Kind = rec ? AntButton.AntKind.Default : AntButton.AntKind.Primary;
+        btnRecord.Danger = rec;
+        btnRecord.Invalidate();
+
+        lblRecStatus.Text = rec
+            ? "录制中…"
+            : _profiles.Count == 0 ? "未录制" : $"共 {_profiles.Count} 个方案";
+        lblRecStatus.ForeColor = rec ? AntStyle.Danger : AntStyle.TextTertiary;
+
+        foreach (var (_, chk) in _recSelection) chk.Enabled = !rec;
+        foreach (var row in _recRowPanels)
+            foreach (Control c in row.Controls)
+                if (c is AntInput || c is AntButton) c.Enabled = !rec;
+
+        if (trayRecordItem != null)
+            trayRecordItem.Text = rec ? "停止录制" : "开始录制";
+        if (cboStartKey != null && _tabIndex == TabRecord) cboStartKey.Enabled = !rec;
     }
 
     /// <summary>按停止条件模式调整数值框：auto=自动点击(0 = 无限，1-100000)显示可编辑，infinite(松手停止)=隐藏。</summary>
@@ -1249,6 +1632,10 @@ public class MainForm : Form
     {
         trayMenu = new ContextMenuStrip();
         trayMenu.Items.Add("显示窗口", null, (_, _) => ShowWindow());
+        trayMenu.Items.Add(new ToolStripSeparator());
+        trayRecordItem = new ToolStripMenuItem("开始录制");
+        trayRecordItem.Click += (_, _) => ToggleRecording();
+        trayMenu.Items.Add(trayRecordItem);
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("退出程序", null, (_, _) => ExitApp());
 

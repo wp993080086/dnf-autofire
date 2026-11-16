@@ -13,6 +13,7 @@ internal static class NativeMethods
     public const uint LLKHF_INJECTED = 0x10;
 
     // 低级鼠标钩子消息与 injected 标志（MSLLHOOKSTRUCT.flags）
+    public const int WM_MOUSEMOVE = 0x0200;
     public const int WM_LBUTTONDOWN = 0x0201;
     public const int WM_LBUTTONUP = 0x0202;
     public const int WM_RBUTTONDOWN = 0x0204;
@@ -36,6 +37,16 @@ internal static class NativeMethods
     public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
     public const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
     public const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+
+    // 录制/回放坐标：虚拟桌面（多屏含负坐标）+ 绝对定位
+    public const uint MOUSEEVENTF_MOVE = 0x0001;
+    public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+    public const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
+
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
 
     public const uint MAPVK_VK_TO_VSC = 0;
     public const uint INPUT_KEYBOARD = 1;
@@ -134,6 +145,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
+    /// <summary>系统度量（用于取虚拟桌面范围：多屏时副屏可能在主屏左侧，坐标为负）。</summary>
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
@@ -191,6 +206,37 @@ internal static class NativeInput
             dy = 0,
             mouseData = 0,
             dwFlags = flag,
+            time = 0,
+            dwExtraInfo = IntPtr.Zero
+        };
+        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    /// <summary>当前虚拟桌面范围（物理像素，多屏可能含负坐标）。</summary>
+    public static Rectangle VirtualScreen() => new(
+        NativeMethods.GetSystemMetrics(NativeMethods.SM_XVIRTUALSCREEN),
+        NativeMethods.GetSystemMetrics(NativeMethods.SM_YVIRTUALSCREEN),
+        NativeMethods.GetSystemMetrics(NativeMethods.SM_CXVIRTUALSCREEN),
+        NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN));
+
+    /// <summary>
+    /// 绝对定位光标：把物理像素坐标归一化到虚拟桌面（0–65535）。
+    /// 不用 SetCursorPos——它不产生标准输入事件，且不同 DPI 感知下语义不一致。
+    /// </summary>
+    public static void SendMouseMoveAbsolute(int x, int y)
+    {
+        var v = VirtualScreen();
+        int vw = Math.Max(2, v.Width), vh = Math.Max(2, v.Height);
+        int nx = (int)Math.Round((x - v.X) * 65535.0 / (vw - 1));
+        int ny = (int)Math.Round((y - v.Y) * 65535.0 / (vh - 1));
+        var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_MOUSE };
+        input.U.mi = new NativeMethods.MOUSEINPUT
+        {
+            dx = Math.Clamp(nx, 0, 65535),
+            dy = Math.Clamp(ny, 0, 65535),
+            mouseData = 0,
+            dwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE
+                      | NativeMethods.MOUSEEVENTF_VIRTUALDESK,
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };

@@ -29,6 +29,8 @@ public class AppConfig
     public List<MouseClickConfig> MouseClicks { get; set; } = new();
     public string StartHotkey { get; set; } = "F6";      // 按键连发热键
     public string MouseStartHotkey { get; set; } = "F8"; // 鼠标连点热键
+    public string RecordHotkey { get; set; } = "F9";     // 录制热键
+    public string PlaybackHotkey { get; set; } = "F10";  // 回放热键
     public string Mode { get; set; } = "B";
 
     public static AppConfig Default() => new()

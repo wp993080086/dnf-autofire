@@ -558,13 +558,15 @@ MacroPlayer.Start(profile, repeatMode, value)
 | **P0a Tab 重构（已完成）** | Tab 数组化：`TabTitles` + `Panel[] _pages`，三页叠放；`RefreshRunCard` / `SyncHotkeyUI` / `ToggleCurrentEngine` / `SaveConfig` 全部改为按 Tab 查表；录制页占位（标题 + 说明，主按钮「开始回放」置灰、录制热键 F9 只展示不可编辑）；`DebugShowTab(int)` + `--screenshot … record` | 按键 / 鼠标 / 录制 三 Tab | 旧功能行为不变（对照截图一致）；`--screenshot … mouse` 正常 |
 | **P1a R1 自动按键（已完成）** | 按键页每行加「松手停止 / 自动连按」+ 次数框；`AutoFireEngine.KeyTarget` 加 `TriggerMode`/`Count`，自动行自置 `Held`、跑完置 `Done`、全自动行跑完自停并通知 UI；行宽 544 | 可用的 R1 | 次数到点自动停；无限次手动停；混合松手行不会误停；停止不卡键 |
 | **P1b 键名校验（已完成）** | 键名支持 `A-Z` / `0-9` / 小键盘 `N0-N9`；非法输入拦在键入层；勾选行空键名/非法/同键一律拒绝开启并定位到该行；`--keytest` 无窗口回归 | 输入健壮性 | 空键名启用行无法开启；`5` 与 `N5` 视为不同键；小写/脏配置自动归一 |
-| **P0b 布局地基** | 窗口 400 → 470、页面 596×328、底部分隔线 Y 位移、常量补齐、`SendMouseButton` 改签名 | 加高后的壳子 | 各页在 328 高度下不溢出；连点回归通过 |
-| **P2 R2 自动点击** | 鼠标页每行加「自动连点」+ 次数；中键第三行；中键常量与 `SendMouseButton(int,bool)` | 可用的 R2 | 左/中/右三键各测；次数到点自停；与按键页自动行可同时开 |
-| **P3 录制** | `MouseHook` 扩展（Move/中键）、`MacroRecorder`、`RecordStore`、录制页方案列表、`RecordOverlayForm` 悬浮条、`F9`、托盘项 | 可录制、可管理方案 | 录 3 个方案、重启后还在；高频移动不掉点、不被摘钩；悬浮条区域不进录制 |
+| **P0b 布局地基（已完成）** | 窗口 400 → 470、页面 596×328、底部分隔线 Y 位移、常量补齐、`SendMouseButton` 改签名 | 加高后的壳子 | 各页在 328 高度下不溢出；连点回归通过 |
+| **P2 R2 自动点击（已完成）** | 鼠标页每行加「自动点击」+ 次数；滚轮（中键）第三行；中键常量与 `SendMouseButton(int,bool)` | 可用的 R2 | 左/中/右三键各测；次数到点自停；与按键页自动行可同时开 |
+| **P3 录制（已完成）** | `MouseHook` 扩展（Move/中键 + 坐标时间戳）、`MacroRecorder`、`RecordStore`（`recordings.json`）、录制页方案列表（单选/改名/删除）、`RecordOverlayForm` 悬浮条、`F9`、托盘项 | 可录制、可管理方案 | 录 3 个方案、重启后还在；高频移动不掉点、不被摘钩；悬浮条区域不进录制 |
 | **P4 回放** | `MacroPlayer`（循环/定时/插值/停止释放）、`F10`、`RefreshRunCard` 联动 | 完整 R3 | N 次/一直/定时三种模式正确；停止立即生效；多屏与 125% 缩放位置准确 |
 | **P5 打磨发版** | 真机复测、文案/README/CHANGELOG、截图、`Version=1.2.0`、tag | v1.2.0 | 各项功能同时可开不互相干扰；托盘/热键/配置全通 |
 
-每阶段的"验收标准"就是提测清单。P0a / P1a / P1b 已落地（`v1.2.0` 分支），接下来 P0b → P2 → P3 → P4。
+每阶段的"验收标准"就是提测清单。P0a / P0b / P1a / P1b / P2 / P3 已落地（`v1.2.0` 分支），剩下 P4 回放 → P5 发版。
+
+> 实际落地与计划的差异：窗口没有加高到 470 —— 三行鼠标配置 + 提示在原有 400 高度里排得下（`RecListHeight=120` 正好 4 行），所以只调整了页面内坐标。
 
 ---
 

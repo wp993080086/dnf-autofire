@@ -1462,6 +1462,7 @@ public class MainForm : Form
             _keyFixing = false;
             e.Handled = true;
             e.SuppressKeyPress = true;
+            KeyBox_TextChanged(txt, EventArgs.Empty); // 上面屏蔽了 TextChanged，这里补跑一次校验与去重
             if (!_loading) SaveConfig();
             return;
         }

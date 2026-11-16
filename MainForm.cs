@@ -14,6 +14,12 @@ public class MainForm : Form
     private const int RowH = 34;
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
 
+    // Tab 索引与标题：页面顺序 = Tab 顺序，加页只改这里与 BuildUi 的构建调用
+    private const int TabKeys = 0;
+    private const int TabMouse = 1;
+    private const int TabRecord = 2;
+    private static readonly string[] TabTitles = { "按键", "鼠标", "录制" };
+
     private readonly List<RowControls> _rows = new();
     private readonly List<MouseRow> _mouseRows = new();
     private readonly AutoFireEngine _engine = new();
@@ -27,16 +33,15 @@ public class MainForm : Form
     private int _tabHover = -1;
     private readonly List<(Rectangle Rect, int Index)> _tabRects = new();
     private Panel tabHeader = null!;
-    private Panel keyPage = null!;
-    private Panel mousePage = null!;
+    private readonly Panel[] _pages = new Panel[TabTitles.Length];  // 下标与 TabTitles 一致，只显示当前页
 
     // Tab 下划线平滑位移动画
     private readonly System.Windows.Forms.Timer _tabAnimTimer;
     private Rectangle _underlineCurrent;   // 当前下划线位置
     private Rectangle _animFrom, _animTo;  // 动画起止
     private float _animT = 1f;             // 0~1，>=1 表示无动画
-    private readonly int[] _tabWidths = new int[2]; // 构造时测量一次，避免每次 Paint 重复测量不一致
-    private readonly Font _tabFont; // Tab 文字：加大加粗，突出两个页签
+    private readonly int[] _tabWidths = new int[TabTitles.Length]; // 构造时测量一次，避免每次 Paint 重复测量不一致
+    private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 
     private Panel pnlRows = null!;
@@ -78,8 +83,8 @@ public class MainForm : Form
         _tabAnimTimer.Tick += TabAnim_Tick;
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
-        _tabWidths[0] = TextRenderer.MeasureText("按键", _tabFont).Width + 16;
-        _tabWidths[1] = TextRenderer.MeasureText("鼠标", _tabFont).Width + 16;
+        for (int i = 0; i < TabTitles.Length; i++)
+            _tabWidths[i] = TextRenderer.MeasureText(TabTitles[i], _tabFont).Width + 16;
 
         try
         {
@@ -117,16 +122,25 @@ public class MainForm : Form
     /// <summary>调试入口：--screenshot 模拟新增行。</summary>
     internal void DebugAddEmptyRow() => AddEmptyRow();
 
-    /// <summary>调试入口：--screenshot mouse 切到鼠标 Tab 再截图。</summary>
-    internal void DebugShowMouseTab()
+    /// <summary>调试入口：--screenshot 切页。index 与 TabTitles 下标一致。</summary>
+    internal void DebugShowTab(int index)
     {
-        _tabIndex = 1;
-        keyPage.Visible = false;
-        mousePage.Visible = true;
+        if (index < 0 || index >= _pages.Length) return;
+        _tabIndex = index;
+        for (int i = 0; i < _pages.Length; i++)
+            _pages[i].Visible = i == index;
+        _underlineCurrent = Rectangle.Empty; // 下次重绘时按新 Tab 重新落位，跳过动画
+        _animT = 1f;
         tabHeader.Invalidate();
         RefreshRunCard(); // 与 TabHeader_Click 保持一致，主按钮跟随 Tab
         SyncHotkeyUI();   // 热键下拉框/标签同步跟随 Tab
     }
+
+    /// <summary>调试入口：--screenshot … mouse 切到鼠标 Tab 再截图。</summary>
+    internal void DebugShowMouseTab() => DebugShowTab(TabMouse);
+
+    /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
+    internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
 
     /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
     internal void DebugEngineTest(string mode, int seconds)
@@ -306,27 +320,45 @@ public class MainForm : Form
     /// <summary>主按钮开关当前 Tab 对应的引擎（按钮点击与热键共用此入口）。</summary>
     private void ToggleCurrentEngine()
     {
-        if (_tabIndex == 0)
+        switch (_tabIndex)
         {
-            if (_engine.Running) DoStop(); else DoStart();
-        }
-        else
-        {
-            if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
+            case TabKeys:
+                if (_engine.Running) DoStop(); else DoStart();
+                break;
+            case TabMouse:
+                if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
+                break;
+            // 录制页：轨迹回放尚未实现，主按钮处于禁用态，不会走到这里
         }
     }
 
     /// <summary>刷新主按钮与"当前控制"标识：跟随 Tab，且反映对应引擎的运行状态。</summary>
     private void RefreshRunCard()
     {
-        bool mouse = _tabIndex == 1;
-        bool running = mouse ? _mouseEngine.Running : _engine.Running;
-        lblTarget.Text = mouse ? "当前控制：鼠标连点" : "当前控制：按键连发";
-        btnMain.Text = mouse
-            ? (running ? "关闭连点" : "开启连点")
-            : (running ? "关闭连发" : "开启连发");
-        btnMain.Danger = running;
-        RefreshStatus(); // 状态栏同时展示两引擎状态
+        switch (_tabIndex)
+        {
+            case TabRecord:
+                lblTarget.Text = "当前控制：轨迹回放";
+                btnMain.Text = "开始回放";
+                btnMain.Enabled = false;   // 回放尚未实现，先禁用避免误点
+                btnMain.Danger = false;
+                break;
+
+            case TabMouse:
+                lblTarget.Text = "当前控制：鼠标连点";
+                btnMain.Text = _mouseEngine.Running ? "关闭连点" : "开启连点";
+                btnMain.Enabled = true;
+                btnMain.Danger = _mouseEngine.Running;
+                break;
+
+            default: // TabKeys
+                lblTarget.Text = "当前控制：按键连发";
+                btnMain.Text = _engine.Running ? "关闭连发" : "开启连发";
+                btnMain.Enabled = true;
+                btnMain.Danger = _engine.Running;
+                break;
+        }
+        RefreshStatus(); // 状态栏同时展示各引擎状态
     }
 
     private static string DescribeStopMode(MouseClickEngine.StopMode mode, int value) => mode switch
@@ -391,10 +423,11 @@ public class MainForm : Form
     private void SaveConfig()
     {
         // 热键下拉框跟随 Tab：当前 Tab 编辑对应引擎的热键，另一侧沿用已存值
+        // （录制页不回写热键，两个引擎的热键都沿用已存值）
         var cfg = new AppConfig
         {
-            StartHotkey = _tabIndex == 0 ? cboStartKey.Text : _config.StartHotkey,
-            MouseStartHotkey = _tabIndex == 1 ? cboStartKey.Text : _config.MouseStartHotkey,
+            StartHotkey = _tabIndex == TabKeys ? cboStartKey.Text : _config.StartHotkey,
+            MouseStartHotkey = _tabIndex == TabMouse ? cboStartKey.Text : _config.MouseStartHotkey,
             Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
             Keys = _rows.Select(r => new KeyConfig
             {
@@ -525,15 +558,24 @@ public class MainForm : Form
         tabHeader.Controls.Add(lblVersion);
         lblVersion.Location = new Point(tabHeader.Width - lblVersion.Width - 16, (44 - lblVersion.Height) / 2);
 
-        keyPage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White };
-        mousePage = new Panel { Location = new Point(0, 44), Size = new Size(596, 258), BackColor = Color.White, Visible = false };
-        BuildMousePage(mousePage);
+        // 页面容器：各页面叠放在同一位置，只显示当前 Tab 对应的那一页
+        for (int i = 0; i < _pages.Length; i++)
+        {
+            _pages[i] = new Panel
+            {
+                Location = new Point(0, 44),
+                Size = new Size(596, 258),
+                BackColor = Color.White,
+                Visible = i == TabKeys
+            };
+            pnlMain.Controls.Add(_pages[i]);
+        }
 
-        BuildKeysPage(keyPage);
+        BuildKeysPage(_pages[TabKeys]);
+        BuildMousePage(_pages[TabMouse]);
+        BuildRecordPage(_pages[TabRecord]);
 
         pnlMain.Controls.Add(tabHeader);
-        pnlMain.Controls.Add(keyPage);
-        pnlMain.Controls.Add(mousePage);
         Controls.Add(pnlMain);
 
         // 启动区（左下）：单按钮跟随当前 Tab——按键页控制连发、鼠标页控制连点
@@ -639,9 +681,9 @@ public class MainForm : Form
 
         _tabRects.Clear();
         int x = 24;
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < TabTitles.Length; i++)
         {
-            string text = i == 0 ? "按键" : "鼠标";
+            string text = TabTitles[i];
             int w = _tabWidths[i];
             bool active = i == _tabIndex;
             var color = active ? AntStyle.Primary
@@ -684,27 +726,36 @@ public class MainForm : Form
         _underlineCurrent = from;
         _tabAnimTimer.Start();
 
-        keyPage.Visible = idx == 0;
-        mousePage.Visible = idx == 1;
+        for (int i = 0; i < _pages.Length; i++)
+            _pages[i].Visible = i == idx;
         tabHeader.Invalidate();
         RefreshRunCard(); // 主按钮与"当前控制"标识跟随 Tab 切换
-        SyncHotkeyUI();   // 热键下拉框跟随 Tab：连发热键 / 连点热键
+        SyncHotkeyUI();   // 热键下拉框跟随 Tab
     }
 
-    /// <summary>设置卡片跟随当前 Tab：按键页=连发热键 + 连发模式 + 键盘提示；鼠标页=连点热键 + 鼠标提示（无模式概念）。</summary>
+    /// <summary>
+    /// 设置卡片跟随当前 Tab：按键页=连发热键 + 连发模式 + 键盘提示；
+    /// 鼠标页=连点热键 + 鼠标提示（无模式概念）；录制页=录制热键占位（功能未实现，仅展示不可编辑）。
+    /// </summary>
     private void SyncHotkeyUI()
     {
-        bool mouse = _tabIndex == 1;
-        lblHotkey.Text = mouse ? "连点热键" : "连发热键";
+        bool mouse = _tabIndex == TabMouse;
+        bool record = _tabIndex == TabRecord;
+
+        lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连发热键";
         _hotkeySyncing = true;
-        cboStartKey.Text = mouse ? _config.MouseStartHotkey : _config.StartHotkey;
+        cboStartKey.Text = record ? "F9" : mouse ? _config.MouseStartHotkey : _config.StartHotkey;
+        cboStartKey.Enabled = !record;   // 录制热键在录制功能落地前不可编辑，避免写入无效配置
         _hotkeySyncing = false;
-        // 连发模式是按键页专属设置，鼠标页隐藏；提示文字分别描述各自的间隔范围
-        lblMode.Visible = !mouse;
-        cboMode.Visible = !mouse;
-        lblModeTip.Text = mouse
-            ? "连点热键全局开关鼠标连点，与连发热键相互独立"
-            : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
+
+        // 连发模式是按键页专属设置，鼠标页与录制页隐藏
+        lblMode.Visible = !mouse && !record;
+        cboMode.Visible = !mouse && !record;
+        lblModeTip.Text = record
+            ? "轨迹录制与回放尚未实现，录制热键暂不可编辑"
+            : mouse
+                ? "连点热键全局开关鼠标连点，与连发热键相互独立"
+                : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)
@@ -894,6 +945,40 @@ public class MainForm : Form
         {
             Text = "开启后按住对应鼠标键即自动连点，松开即停；间隔范围 100-10000ms，游戏内有效间隔下限 40ms。",
             Location = new Point(16, 130),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 8f)
+        };
+        page.Controls.Add(lblHint);
+    }
+
+    /// <summary>录制页（占位）：轨迹录制与回放尚未实现，先建立页面与 Tab 位，后续版本填充方案列表与回放设置。</summary>
+    private void BuildRecordPage(Control page)
+    {
+        var lblTitle = new Label
+        {
+            Text = "鼠标录制回放",
+            Location = new Point(16, 12),
+            AutoSize = true,
+            ForeColor = AntStyle.TextPri,
+            Font = new Font(AntStyle.FontName, 9.5f)
+        };
+        page.Controls.Add(lblTitle);
+
+        var lblEmpty = new Label
+        {
+            Text = "轨迹录制与回放功能开发中",
+            Location = new Point(16, 52),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 9f)
+        };
+        page.Controls.Add(lblEmpty);
+
+        var lblHint = new Label
+        {
+            Text = "将支持：录制鼠标轨迹与点击存为多个方案（方案A、方案B…），回放 N 次 / 一直放 / 定时 N 分钟。",
+            Location = new Point(16, 80),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)

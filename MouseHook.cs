@@ -5,7 +5,7 @@ namespace DnfAutoFire;
 /// <summary>
 /// 低级鼠标钩子。只监听物理鼠标键（过滤程序自身注入的点击），
 /// 处理程序调用 SuppressCurrent() 可吞掉当前这个原生鼠标键。
-/// 事件参数为鼠标键码：1=左键 2=右键（VK_LBUTTON / VK_RBUTTON）。
+/// 事件参数为鼠标键码：1=左键 2=右键 4=滚轮按下中键（VK_LBUTTON / VK_RBUTTON / VK_MBUTTON）。
 /// </summary>
 internal sealed class MouseHook : IDisposable
 {
@@ -44,11 +44,15 @@ internal sealed class MouseHook : IDisposable
                         => NativeMethods.VK_LBUTTON,
                     NativeMethods.WM_RBUTTONDOWN or NativeMethods.WM_RBUTTONUP
                         => NativeMethods.VK_RBUTTON,
+                    NativeMethods.WM_MBUTTONDOWN or NativeMethods.WM_MBUTTONUP
+                        => NativeMethods.VK_MBUTTON,
                     _ => null
                 };
                 if (button.HasValue)
                 {
-                    bool down = msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONDOWN;
+                    bool down = msg is NativeMethods.WM_LBUTTONDOWN
+                        or NativeMethods.WM_RBUTTONDOWN
+                        or NativeMethods.WM_MBUTTONDOWN;
                     if (down) ButtonDown?.Invoke(button.Value);
                     else ButtonUp?.Invoke(button.Value);
                 }

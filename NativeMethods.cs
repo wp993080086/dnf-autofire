@@ -17,6 +17,8 @@ internal static class NativeMethods
     public const int WM_LBUTTONUP = 0x0202;
     public const int WM_RBUTTONDOWN = 0x0204;
     public const int WM_RBUTTONUP = 0x0205;
+    public const int WM_MBUTTONDOWN = 0x0207;
+    public const int WM_MBUTTONUP = 0x0208;
     public const uint LLMHF_INJECTED = 0x01;            // 事件由 SendInput 等注入
     public const uint LLMHF_LOWER_IL_INJECTED = 0x02;   // 低完整性进程注入
     public const uint LLMHF_ANY_INJECTED = LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED;
@@ -24,6 +26,7 @@ internal static class NativeMethods
     // VK 鼠标键码（钩子事件统一用）
     public const int VK_LBUTTON = 0x01;
     public const int VK_RBUTTON = 0x02;
+    public const int VK_MBUTTON = 0x04;
 
     // SendInput 鼠标事件标志
     public const uint INPUT_MOUSE = 0;
@@ -31,6 +34,8 @@ internal static class NativeMethods
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
     public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
     public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+    public const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+    public const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
 
     public const uint MAPVK_VK_TO_VSC = 0;
     public const uint INPUT_KEYBOARD = 1;
@@ -167,12 +172,18 @@ internal static class NativeInput
         SendKey(vk, up: true);
     }
 
-    /// <summary>发送鼠标按下/抬起事件（left=true 左键，否则右键；up=true 抬起）。位置为当前光标处。</summary>
-    public static void SendMouseButton(bool left, bool up)
+    /// <summary>
+    /// 发送鼠标按下/抬起事件（button 为 VK_LBUTTON / VK_RBUTTON / VK_MBUTTON；up=true 抬起）。
+    /// 位置为当前光标处。
+    /// </summary>
+    public static void SendMouseButton(int button, bool up)
     {
-        uint flag = left
-            ? (up ? NativeMethods.MOUSEEVENTF_LEFTUP : NativeMethods.MOUSEEVENTF_LEFTDOWN)
-            : (up ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_RIGHTDOWN);
+        uint flag = button switch
+        {
+            NativeMethods.VK_RBUTTON => up ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_RIGHTDOWN,
+            NativeMethods.VK_MBUTTON => up ? NativeMethods.MOUSEEVENTF_MIDDLEUP : NativeMethods.MOUSEEVENTF_MIDDLEDOWN,
+            _ => up ? NativeMethods.MOUSEEVENTF_LEFTUP : NativeMethods.MOUSEEVENTF_LEFTDOWN
+        };
         var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_MOUSE };
         input.U.mi = new NativeMethods.MOUSEINPUT
         {

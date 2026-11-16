@@ -10,8 +10,7 @@ public class MainForm : Form
     private const int MouseMinMs = 100;      // 鼠标连点间隔下限
     private const int MouseMaxMs = 10000;    // 鼠标连点间隔上限（10 秒）
     private const int MouseDefaultMs = 300;  // 鼠标连点间隔默认值
-    private const int MaxClicks = 9999;   // 鼠标连点：次数上限
-    private const int MaxKeyRepeat = 100000; // 自动连按：次数上限（0 = 无限）
+    private const int MaxKeyRepeat = 100000; // 自动连按 / 自动点击：次数上限（0 = 无限）
     private const int RowH = 34;
     private const int RowWidth = 544;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
@@ -133,6 +132,14 @@ public class MainForm : Form
             catch (Exception ex) { Logger.Error("AllDone", ex); }
         };
 
+        // 鼠标侧同构：自动点击行全部跑完 → 引擎自停，界面回到停止态
+        _mouseEngine.AllDone += () =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try { BeginInvoke(new Action(OnMouseAutoFinished)); }
+            catch (Exception ex) { Logger.Error("MouseAllDone", ex); }
+        };
+
         Shown += (_, _) =>
         {
             RegisterHotkeys();
@@ -179,6 +186,14 @@ public class MainForm : Form
     /// <summary>调试入口：--screenshot … mouse 切到鼠标 Tab 再截图。</summary>
     internal void DebugShowMouseTab() => DebugShowTab(TabMouse);
 
+    /// <summary>调试入口：--mouselayout 打印鼠标页各控件实际边界，核对行内排布。</summary>
+    internal void DebugDumpMouseLayout()
+    {
+        foreach (var r in _mouseRows)
+            foreach (Control c in r.RowPanel.Controls)
+                Console.WriteLine($"{r.Button} {c.GetType().Name} '{c.Text}' loc={c.Location} size={c.Size} right={c.Right}");
+    }
+
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
 
@@ -212,6 +227,26 @@ public class MainForm : Form
             DoStart();
             var stop = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
             stop.Tick += (_, _) => { stop.Stop(); DoStop(); Close(); };
+            stop.Start();
+        };
+        t.Start();
+    }
+
+    /// <summary>调试入口：--mousetest &lt;秒&gt; 按当前配置开启鼠标连点，数秒后关闭退出（配 DNF_DRYRUN=1 只跑调度不注入）。</summary>
+    internal void DebugMouseTest(int seconds)
+    {
+        var t = new System.Windows.Forms.Timer { Interval = 800 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            DoMouseStart();
+            var stop = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
+            stop.Tick += (_, _) =>
+            {
+                stop.Stop();
+                if (_mouseEngine.Running) DoMouseStop();
+                Close();
+            };
             stop.Start();
         };
         t.Start();
@@ -390,10 +425,10 @@ public class MainForm : Form
         {
             if (!r.Chk.Checked) continue;
             targets.Add(new MouseClickEngine.MouseTarget(
-                r.Button == "L" ? 1 : 2,
-                NormalizeMs(r.NumMs.Text),
-                r.SelStop.SelectedIndex == 0 ? MouseClickEngine.StopMode.Count : MouseClickEngine.StopMode.Infinite,
-                Math.Max(1, r.NumValue.Value)));
+                MouseButtonVk(r.Button),
+                NormalizeMouseMs(r.NumMs.Text),
+                r.SelStop.SelectedIndex == 1 ? MouseClickEngine.StopMode.Auto : MouseClickEngine.StopMode.Infinite,
+                NormalizeKeyRepeat(r.NumValue.Text)));
         }
 
         // 空配置拦截：没有启用的行时不开引擎，直接引导用户去配置
@@ -422,9 +457,9 @@ public class MainForm : Form
 
         Hide();
         string desc = string.Join("、", targets.Select(t =>
-            $"{(t.Button == 1 ? "左键" : "右键")}({DescribeStopMode(t.Mode, t.StopValue)})"));
+            $"{MouseButtonName(t.Button)}({DescribeStopMode(t.Mode, t.Count)})"));
         trayIcon.ShowBalloonTip(2000, "鼠标连点",
-            $"已开启（{desc}），最小化到托盘。\n按住对应鼠标键即连点，松开即停。",
+            $"已开启（{desc}），最小化到托盘。\n松手停止行按住对应鼠标键即连点，自动点击行无需按住。",
             ToolTipIcon.Info);
     }
 
@@ -436,6 +471,17 @@ public class MainForm : Form
         RefreshRunCard();
         if (Visible) return;
         trayIcon.ShowBalloonTip(1500, "鼠标连点", "鼠标连点已关闭。", ToolTipIcon.Info);
+    }
+
+    /// <summary>自动点击把设定次数跑完：引擎已经自行退出，这里把界面拉回停止态。</summary>
+    private void OnMouseAutoFinished()
+    {
+        if (IsDisposed) return;
+        _mouseEngine.Stop();
+        Logger.Info("自动点击已完成设定次数，引擎自动关闭");
+        SetMouseUiLocked(false);
+        RefreshRunCard();
+        trayIcon.ShowBalloonTip(1600, "鼠标连点", "自动点击已完成设定次数，已自动关闭。", ToolTipIcon.Info);
     }
 
     /// <summary>主按钮开关当前 Tab 对应的引擎（按钮点击与热键共用此入口）。</summary>
@@ -484,8 +530,23 @@ public class MainForm : Form
 
     private static string DescribeStopMode(MouseClickEngine.StopMode mode, int value) => mode switch
     {
-        MouseClickEngine.StopMode.Count => $"{value} 次",
+        MouseClickEngine.StopMode.Auto => value > 0 ? $"自动点击 {value} 次" : "自动点击 一直点",
         _ => "松手停止"
+    };
+
+    /// <summary>配置行按钮标识 → VK 键码（L=左键 R=右键 M=滚轮按下/中键）。</summary>
+    private static int MouseButtonVk(string button) => button switch
+    {
+        "R" => NativeMethods.VK_RBUTTON,
+        "M" => NativeMethods.VK_MBUTTON,
+        _ => NativeMethods.VK_LBUTTON
+    };
+
+    private static string MouseButtonName(int vk) => vk switch
+    {
+        NativeMethods.VK_RBUTTON => "右键",
+        NativeMethods.VK_MBUTTON => "滚轮",
+        _ => "左键"
     };
 
     /// <summary>状态栏：两个引擎各自的运行状态，独立开关一目了然。</summary>
@@ -571,8 +632,8 @@ public class MainForm : Form
             {
                 Button = r.Button,
                 IntervalMs = NormalizeMouseMs(r.NumMs.Text),
-                StopMode = r.SelStop.SelectedIndex == 0 ? "count" : "infinite",
-                StopValue = Math.Max(1, r.NumValue.Value),
+                StopMode = r.SelStop.SelectedIndex == 1 ? "auto" : "infinite",
+                StopValue = NormalizeKeyRepeat(r.NumValue.Text),
                 Enabled = r.Chk.Checked
             }).ToList()
         };
@@ -612,21 +673,23 @@ public class MainForm : Form
         cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连发热键
         cboMode.SelectedIndex = _config.Mode == "A" ? 1 : 0;
 
-        // 鼠标连点行：固定左/右两行，按 Button 匹配配置
+        // 鼠标连点行：固定左/右/滚轮三行，按 Button 匹配配置
         var mouseCfg = _config.MouseClicks ?? new List<MouseClickConfig>();
         foreach (var r in _mouseRows)
         {
             var cfg = mouseCfg.FirstOrDefault(m => m.Button == r.Button);
             if (cfg == null)
             {
-                // 旧配置（v1.0.0 无 MouseClicks）或缺失该键条目：按默认"松手停止"初始化，不能跳过
-                ApplyMouseStopMode(r, "infinite", 50);
+                // 旧配置（v1.0.0 无 MouseClicks、v1.1.x 无滚轮行）：按默认"松手停止"初始化，不能跳过
+                ApplyMouseStopMode(r, "infinite", 0);
                 continue;
             }
             r.Chk.Checked = cfg.Enabled;
             r.NumMs.Text = Math.Clamp(cfg.IntervalMs, MouseMinMs, MouseMaxMs).ToString();
-            r.SelStop.SelectedIndex = cfg.StopMode == "count" ? 0 : 1; // 先同步下拉框
-            ApplyMouseStopMode(r, cfg.StopMode, cfg.StopValue);        // 再以配置值收口（最终生效）
+            // v1.1.x 的 count（按住点 N 次）并入"自动点击"
+            string mode = cfg.StopMode is "auto" or "count" ? "auto" : "infinite";
+            r.SelStop.SelectedIndex = mode == "auto" ? 1 : 0; // 先同步下拉框
+            ApplyMouseStopMode(r, mode, cfg.StopValue);       // 再以配置值收口（最终生效）
         }
 
         SetKeysUiLocked(_engine.Running);
@@ -1026,7 +1089,7 @@ public class MainForm : Form
         };
     }
 
-    /// <summary>鼠标连点页：固定左/右两行 + 停止条件下拉（点 N 次 / 松手停止，默认松手停止）。</summary>
+    /// <summary>鼠标连点页：固定左/右/滚轮三行 + 停止条件下拉（松手停止 / 自动点击，默认松手停止）。</summary>
     private void BuildMousePage(Control page)
     {
         var lblTitle = new Label
@@ -1039,10 +1102,10 @@ public class MainForm : Form
         };
         page.Controls.Add(lblTitle);
 
-        foreach (var (button, label, y) in new[] { ("L", "左键", 44), ("R", "右键", 82) })
+        foreach (var (button, label, y) in new[] { ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120) })
         {
             var row = new MouseRow { Button = button };
-            var panel = new Panel { Location = new Point(16, y), Size = new Size(544, RowH), BackColor = Color.White };
+            var panel = new Panel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.White };
             row.RowPanel = panel;
 
             row.Chk = new AntCheckBox
@@ -1052,39 +1115,45 @@ public class MainForm : Form
                 Location = new Point(0, 2),
                 Size = new Size(56, 28)
             };
-            var lblHold = MakeRowText("按住", 58);
-            var lblBtn = MakeRowText(label, 92, AntStyle.TextPri, bold: true);
-            var lblGap = MakeRowText("键，间隔", 128);
+            // 与按键页同构：文字宽度按实测值顺排（Label.AutoSize 要挂到父控件后才生效，布局时不能读 Right）
+            var lblBtn = MakeRowText(label, 58, AntStyle.TextPri, bold: true);
+            int x = 58 + RowTextWidth(label, bold: true) + 6;
+            var lblGap = MakeRowText("键，间隔", x);
+            x += RowTextWidth("键，间隔") + 8;
             row.NumMs = new AntNumber
             {
-                Location = new Point(188, 3),
+                Location = new Point(x, 3),
                 Size = new Size(84, 28),
                 Step = 100,
                 Min = MouseMinMs,
                 Max = MouseMaxMs
             };
             row.NumMs.Text = MouseDefaultMs.ToString();
-            var lblMs = MakeRowText("毫秒，", 278);
-            row.SelStop = new AntSelect { Location = new Point(322, 2), Width = 110 };
-            row.SelStop.Inner.DropDownWidth = 110;
-            row.SelStop.Inner.Items.Add("点 N 次");
+            x += 84 + 6;
+            var lblMs = MakeRowText("毫秒，", x);
+            x += RowTextWidth("毫秒，") + 8;
+            row.SelStop = new AntSelect { Location = new Point(x, 2), Width = 96 };
+            row.SelStop.Inner.DropDownWidth = 96;
             row.SelStop.Inner.Items.Add("松手停止");
-            row.SelStop.SelectedIndex = 1; // 默认松手停止
+            row.SelStop.Inner.Items.Add("自动点击");
+            row.SelStop.SelectedIndex = 0; // 默认松手停止
+            x += 96 + 6;
             row.NumValue = new AntNumber
             {
-                Location = new Point(440, 3),
-                Size = new Size(76, 28),
-                Step = 10,
-                Min = 1,
-                Max = MaxClicks
+                Location = new Point(x, 3),
+                Size = new Size(72, 28),
+                Step = 100,
+                Min = 0,
+                Max = MaxKeyRepeat
             };
-            row.NumValue.Text = "50";
-            ApplyMouseStopMode(row, "infinite", 50); // 初始即收口：默认松手停止时隐藏数值框（配置缺失时不会再漏显示）
+            row.NumValue.Text = "0"; // 与按键页一致：0 = 无限
+            row.NumValue.Inner.MaxLength = 6;
+            ApplyMouseStopMode(row, "infinite", 0); // 初始即收口：默认松手停止时隐藏数值框（配置缺失时不会再漏显示）
 
             row.SelStop.SelectedIndexChanged += (_, _) =>
             {
                 // 切换停止条件：调整数值框可见性/范围，并按当前值重新钳制
-                string mode = row.SelStop.SelectedIndex == 0 ? "count" : "infinite";
+                string mode = row.SelStop.SelectedIndex == 1 ? "auto" : "infinite";
                 ApplyMouseStopMode(row, mode, row.NumValue.Value);
                 if (!_loading) SaveConfig();
             };
@@ -1112,7 +1181,7 @@ public class MainForm : Form
 
             panel.Controls.AddRange(new Control[]
             {
-                row.Chk, lblHold, lblBtn, lblGap, row.NumMs, lblMs, row.SelStop, row.NumValue
+                row.Chk, lblBtn, lblGap, row.NumMs, lblMs, row.SelStop, row.NumValue
             });
             page.Controls.Add(panel);
             _mouseRows.Add(row);
@@ -1120,8 +1189,8 @@ public class MainForm : Form
 
         var lblHint = new Label
         {
-            Text = "开启后按住对应鼠标键即自动连点，松开即停；间隔范围 100-10000ms，游戏内有效间隔下限 40ms。",
-            Location = new Point(16, 130),
+            Text = "开启后按住对应鼠标键即自动连点，松开即停；滚轮＝滚轮按下（中键）。间隔 100-10000ms，游戏内有效下限 40ms。",
+            Location = new Point(16, 168),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
@@ -1163,17 +1232,17 @@ public class MainForm : Form
         page.Controls.Add(lblHint);
     }
 
-    /// <summary>按停止条件模式调整数值框：count=次数(1-9999)显示可编辑，infinite(松手停止)=隐藏。</summary>
+    /// <summary>按停止条件模式调整数值框：auto=自动点击(0 = 无限，1-100000)显示可编辑，infinite(松手停止)=隐藏。</summary>
     private void ApplyMouseStopMode(MouseRow r, string mode, int value)
     {
-        bool infinite = mode != "count";
+        bool infinite = mode != "auto";
         r.NumValue.Visible = !infinite;
-        r.NumValue.Enabled = !infinite && !_mouseEngine.Running; // 修复：切回"点 N 次"时必须恢复可编辑
+        r.NumValue.Enabled = !infinite && !_mouseEngine.Running; // 切回"自动点击"时必须恢复可编辑
         if (infinite) return;
-        r.NumValue.Min = 1;
-        r.NumValue.Max = MaxClicks;
-        r.NumValue.Step = 10;
-        r.NumValue.SetValue(value);
+        r.NumValue.Min = 0;
+        r.NumValue.Max = MaxKeyRepeat;
+        r.NumValue.Step = 100;
+        r.NumValue.SetValue(Math.Clamp(value, 0, MaxKeyRepeat));
     }
 
     private void BuildTray()
@@ -1206,10 +1275,10 @@ public class MainForm : Form
         public AntButton LnkDel = null!;
     }
 
-    /// <summary>鼠标连点配置行（固定左/右两行，无增删）。</summary>
+    /// <summary>鼠标连点配置行（固定左/右/滚轮三行，无增删）。</summary>
     private sealed class MouseRow
     {
-        public string Button = "L"; // L=左键 R=右键
+        public string Button = "L"; // L=左键 R=右键 M=滚轮按下（中键）
         public Panel RowPanel = null!;
         public AntCheckBox Chk = null!;
         public AntNumber NumMs = null!;
@@ -1552,6 +1621,13 @@ public class MainForm : Form
         };
     }
 
+    /// <summary>行内文字实测宽度：Label.AutoSize 要挂到父控件后才生效，布局阶段必须自己量。</summary>
+    private static int RowTextWidth(string text, bool bold = false)
+    {
+        using var font = bold ? new Font(AntStyle.FontName, 9f, FontStyle.Bold) : new Font(AntStyle.FontName, 9f);
+        return TextRenderer.MeasureText(text, font).Width;
+    }
+
     private static int NormalizeMs(string text)
     {
         if (!int.TryParse(text?.Trim(), out int v) || v <= 0) return MinMs;
@@ -1629,7 +1705,7 @@ public class MainForm : Form
             r.Chk.Enabled = !locked;
             r.NumMs.Enabled = !locked;
             r.SelStop.Enabled = !locked;
-            r.NumValue.Enabled = !locked && r.SelStop.SelectedIndex == 0; // 仅"点 N 次"有数值框
+            r.NumValue.Enabled = !locked && r.SelStop.SelectedIndex == 1; // 仅"自动点击"有数值框
         }
     }
 

@@ -44,6 +44,27 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --mouselayout 打印鼠标页行内控件边界
+        if (args.Length >= 2 && args[1] == "--mouselayout")
+        {
+            using var mf = new MainForm();
+            mf.Show();
+            Application.DoEvents();
+            mf.DebugDumpMouseLayout();
+            mf.Close();
+            return;
+        }
+
+        // 调试用：dnf-autofire --mousetest <秒数> 自动开启鼠标连点，数秒后关闭退出（真机验证连点/自动点击收尾）
+        if (args.Length >= 3 && args[1] == "--mousetest")
+        {
+            var form = new MainForm();
+            form.Show();
+            form.DebugMouseTest(int.TryParse(args[2], out int msec) ? msec : 5);
+            Application.Run(form);
+            return;
+        }
+
         // 调试用：dnf-autofire --uitest <prefix> 窗口可见状态下切换按钮状态并抓图，验证自绘控件重绘
         if (args.Length >= 3 && args[1] == "--uitest")
         {

@@ -13,10 +13,10 @@ public class KeyConfig
     public bool Enabled { get; set; } = true;
 }
 
-/// <summary>鼠标连点配置行。StopMode: count=点N次 / infinite=松手停止。</summary>
+/// <summary>鼠标连点配置行。StopMode: infinite=松手停止 / auto=自动点击（StopValue 0 表示无限）。</summary>
 public class MouseClickConfig
 {
-    public string Button { get; set; } = "L"; // L=左键 R=右键
+    public string Button { get; set; } = "L"; // L=左键 R=右键 M=滚轮按下（中键）
     public int IntervalMs { get; set; } = 300;
     public string StopMode { get; set; } = "infinite";
     public int StopValue { get; set; } = 50;
@@ -40,8 +40,9 @@ public class AppConfig
         },
         MouseClicks =
         {
-            new MouseClickConfig { Button = "L", IntervalMs = 100, StopMode = "infinite", StopValue = 50, Enabled = false },
-            new MouseClickConfig { Button = "R", IntervalMs = 100, StopMode = "infinite", StopValue = 50, Enabled = false }
+            new MouseClickConfig { Button = "L", IntervalMs = 100, StopMode = "infinite", StopValue = 0, Enabled = false },
+            new MouseClickConfig { Button = "R", IntervalMs = 100, StopMode = "infinite", StopValue = 0, Enabled = false },
+            new MouseClickConfig { Button = "M", IntervalMs = 100, StopMode = "infinite", StopValue = 0, Enabled = false }
         }
     };
 }

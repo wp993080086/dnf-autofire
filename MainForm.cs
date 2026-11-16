@@ -40,7 +40,8 @@ public class MainForm : Form
     private Rectangle _underlineCurrent;   // 当前下划线位置
     private Rectangle _animFrom, _animTo;  // 动画起止
     private float _animT = 1f;             // 0~1，>=1 表示无动画
-    private readonly int[] _tabWidths = new int[TabTitles.Length]; // 构造时测量一次，避免每次 Paint 重复测量不一致
+    private readonly int[] _tabWidths = new int[TabTitles.Length];     // 页签命中区宽度（文字宽 + 左右留白），构造时测量
+    private readonly int[] _tabTextWidths = new int[TabTitles.Length]; // 纯文字宽度，下划线据此对称收短
     private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 
@@ -84,7 +85,10 @@ public class MainForm : Form
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
         for (int i = 0; i < TabTitles.Length; i++)
-            _tabWidths[i] = TextRenderer.MeasureText(TabTitles[i], _tabFont).Width + 16;
+        {
+            _tabTextWidths[i] = TextRenderer.MeasureText(TabTitles[i], _tabFont).Width;
+            _tabWidths[i] = _tabTextWidths[i] + 16;
+        }
 
         try
         {
@@ -101,7 +105,12 @@ public class MainForm : Form
         btnMain.Click += (_, _) => ToggleCurrentEngine();
         btnAdd.Click += (_, _) => AddEmptyRow();
 
-        Shown += (_, _) => RegisterHotkeys();
+        Shown += (_, _) =>
+        {
+            RegisterHotkeys();
+            // 启动时不把焦点交给第一个按键输入框：焦点停在 Tab 栏（无光标、无焦点框）
+            tabHeader.Focus();
+        };
         _wheelFilter = new WheelFilter(this);
         Application.AddMessageFilter(_wheelFilter);
         FormClosed += (_, _) =>
@@ -538,7 +547,7 @@ public class MainForm : Form
         var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(596, 302), BackColor = Color.White };
 
         // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
-        tabHeader = new Panel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White };
+        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White, TabStop = true };
         tabHeader.Paint += TabHeader_Paint;
         tabHeader.MouseClick += TabHeader_Click;
         tabHeader.MouseMove += TabHeader_Move;
@@ -689,7 +698,9 @@ public class MainForm : Form
             var color = active ? AntStyle.Primary
                 : i == _tabHover ? AntStyle.TextPri
                 : AntStyle.TextSec;
-            TextRenderer.DrawText(g, text, _tabFont, new Point(x, 11), color);
+            // 文字在页签内水平居中，下划线才能以文字为基准对称
+            TextRenderer.DrawText(g, text, _tabFont, new Rectangle(x, 11, w, 24), color,
+                TextFormatFlags.HorizontalCenter);
             _tabRects.Add((new Rectangle(x, 0, w, 44), i));
             x += w + 24;
         }
@@ -706,10 +717,14 @@ public class MainForm : Form
         }
     }
 
-    private Rectangle UnderlineOf(int index) =>
-        index >= 0 && index < _tabRects.Count
-            ? new Rectangle(_tabRects[index].Rect.X, 41, _tabRects[index].Rect.Width, 3)
-            : Rectangle.Empty;
+    /// <summary>下划线：以文字宽度为基准左右各收 4px，并在页签内水平居中，避免比文字宽出一截。</summary>
+    private Rectangle UnderlineOf(int index)
+    {
+        if (index < 0 || index >= _tabRects.Count) return Rectangle.Empty;
+        var rect = _tabRects[index].Rect;
+        int w = Math.Max(12, Math.Min(_tabTextWidths[index], rect.Width) - 8);
+        return new Rectangle(rect.X + (rect.Width - w) / 2, 41, w, 3);
+    }
 
     private void TabHeader_Click(object? sender, MouseEventArgs e)
     {
@@ -1321,5 +1336,15 @@ public class MainForm : Form
             _f.scrollBar.SetOffset(_f.scrollBar.Offset - step);
             return true; // 吞掉，避免文本框等自行处理
         }
+    }
+
+    /// <summary>
+    /// 可接收焦点的 Tab 头容器。窗体启动/重新激活时 WinForms 会自动把焦点交给第一个可选控件，
+    /// 若不接管就会落到第一个「按下 [ ] 键」输入框上（光标闪烁、像是被选中）。
+    /// 让 Tab 头成为那个"第一个可选控件"，它不自绘焦点框，视觉上等于没有焦点。
+    /// </summary>
+    private sealed class TabHeaderPanel : Panel
+    {
+        public TabHeaderPanel() => SetStyle(ControlStyles.Selectable, true);
     }
 }

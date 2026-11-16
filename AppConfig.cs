@@ -31,6 +31,8 @@ public class AppConfig
     public string MouseStartHotkey { get; set; } = "F8"; // 鼠标连点热键
     public string RecordHotkey { get; set; } = "F9";     // 录制热键
     public string PlaybackHotkey { get; set; } = "F10";  // 回放热键
+    public string PlayMode { get; set; } = "infinite";   // 回放模式：count=回放 N 次 / infinite=一直放 / duration=定时 N 分钟
+    public int PlayValue { get; set; } = 1;              // 回放次数或分钟数
     public string Mode { get; set; } = "B";
 
     public static AppConfig Default() => new()

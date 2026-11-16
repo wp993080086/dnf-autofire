@@ -6,6 +6,7 @@ public class MainForm : Form
     private const int HOTKEY_ID_START = 1;  // 按键连发热键
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int HOTKEY_ID_RECORD = 3; // 录制热键
+    private const int HOTKEY_ID_PLAY = 4;   // 回放热键
     private const int MinMs = 50;
     private const int MaxMs = 5000;
     private const int MouseMinMs = 100;      // 鼠标连点间隔下限
@@ -76,6 +77,13 @@ public class MainForm : Form
     private RecordOverlayForm? _overlay;
     private string _selectedProfileId = "";
 
+    // 回放
+    private MacroPlayer? _player;
+    private AntSelect cboPlayMode = null!, cboPlayKey = null!;
+    private AntNumber numPlayValue = null!;
+    private Label lblPlay = null!, lblPlayUnit = null!, lblPlayInfo = null!;
+    private readonly System.Windows.Forms.Timer _playTimer; // 回放进度 200ms 刷新
+
     private AntButton btnMain = null!;      // 唯一主按钮：控制当前 Tab 对应的引擎
     private Label lblTarget = null!;        // "当前控制：按键连发/鼠标连点" 标识
     private Label lblStatus = null!;
@@ -91,6 +99,7 @@ public class MainForm : Form
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
     private ToolStripMenuItem trayRecordItem = null!;
+    private ToolStripMenuItem trayPlayItem = null!;
 
     public MainForm()
     {
@@ -115,6 +124,9 @@ public class MainForm : Form
         // 页面切换白幕淡入
         _fadeTimer = new System.Windows.Forms.Timer { Interval = 15 };
         _fadeTimer.Tick += Fade_Tick;
+        // 回放进度：200ms 刷新「第 N 轮 · mm:ss」
+        _playTimer = new System.Windows.Forms.Timer { Interval = 200 };
+        _playTimer.Tick += PlayTimer_Tick;
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
         for (int i = 0; i < TabTitles.Length; i++)
@@ -178,12 +190,14 @@ public class MainForm : Form
             Application.RemoveMessageFilter(_wheelFilter);
             _tabAnimTimer.Dispose();
             _fadeTimer.Dispose();
+            _playTimer.Dispose();
             _veil?.Dispose();
             _fontBold.Dispose();
             _tabFont.Dispose();
             _keyTip.Dispose();
             _engine.Stop();
             _mouseEngine.Stop();
+            _player?.Stop();
             UnregisterHotkeys();
             trayIcon.Visible = false;
             trayIcon.Dispose();
@@ -310,6 +324,43 @@ public class MainForm : Form
             cap.Start();
         };
         t.Start();
+    }
+
+    /// <summary>
+    /// 调试入口：--playtest &lt;方案名&gt; &lt;值&gt; [count|infinite|duration] [最长秒数]。
+    /// 按指定模式开启回放，到点/跑完自动关闭退出（配 DNF_DRYRUN=1 只跑时间轴，不注入鼠标）。
+    /// </summary>
+    internal void DebugPlayTest(string name, int value, string mode, int guardSeconds)
+    {
+        DebugShowTab(TabRecord);
+        var profile = _profiles.FirstOrDefault(p => p.Name == name) ?? _profiles.FirstOrDefault();
+        if (profile == null)
+        {
+            Logger.Info("[playtest] 没有可用方案");
+            Close();
+            return;
+        }
+
+        _selectedProfileId = profile.Id;
+        RebuildRecordList();
+        cboPlayMode.SelectedIndex = mode switch { "count" => 0, "duration" => 2, _ => 1 };
+        numPlayValue.SetValue(Math.Max(1, value));
+        var before = MousePosition;
+        Logger.Info($"[playtest] 开始：{profile.Name} {profile.Points.Count} 点 模式={mode} 值={value} 光标={before.X},{before.Y}");
+
+        StartPlayback();
+
+        // 兜底：到点无论是否跑完都停，避免测试挂住
+        var guard = new System.Windows.Forms.Timer { Interval = Math.Max(3, guardSeconds) * 1000 };
+        guard.Tick += (_, _) =>
+        {
+            guard.Stop();
+            if (_player != null) StopPlayback();
+            var after = MousePosition;
+            Logger.Info($"[playtest] 结束：profiles={_profiles.Count} player={(_player == null ? "null" : "running")} 光标={after.X},{after.Y}");
+            Close();
+        };
+        guard.Start();
     }
 
     /// <summary>
@@ -559,7 +610,9 @@ public class MainForm : Form
             case TabMouse:
                 if (_mouseEngine.Running) DoMouseStop(); else DoMouseStart();
                 break;
-            // 录制页：轨迹回放尚未实现，主按钮处于禁用态，不会走到这里
+            case TabRecord:
+                if (_player != null) StopPlayback(); else StartPlayback();
+                break;
         }
     }
 
@@ -570,9 +623,10 @@ public class MainForm : Form
         {
             case TabRecord:
                 lblTarget.Text = "当前控制：轨迹回放";
-                btnMain.Text = "开始回放";
-                btnMain.Enabled = false;   // 回放尚未实现，先禁用避免误点
-                btnMain.Danger = false;
+                btnMain.Text = _player != null ? "停止回放" : "开始回放";
+                // 未选方案/录制中不可开始；回放中恒可停止
+                btnMain.Enabled = _player != null || (_recorder == null && SelectedProfile() != null);
+                btnMain.Danger = _player != null;
                 break;
 
             case TabMouse:
@@ -631,7 +685,7 @@ public class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         // 运行中点 X → 隐藏到托盘，不退出（任一引擎在跑都一样）
-        if (!_exiting && (_engine.Running || _mouseEngine.Running))
+        if (!_exiting && (_engine.Running || _mouseEngine.Running || _player != null))
         {
             e.Cancel = true;
             Hide();
@@ -651,8 +705,9 @@ public class MainForm : Form
 
     private void ExitApp()
     {
-        // 录制中退出：先把已采到的轨迹落盘，再关窗
+        // 录制中退出：先把已采到的轨迹落盘，再关窗；回放中退出：先停并释放按键
         if (_recorder != null) StopRecording();
+        if (_player != null) StopPlayback();
         _exiting = true;
         Close();
     }
@@ -674,6 +729,9 @@ public class MainForm : Form
                 case HOTKEY_ID_RECORD:
                     ToggleRecording();
                     break;
+                case HOTKEY_ID_PLAY:
+                    TogglePlayback();
+                    break;
             }
         }
     }
@@ -689,7 +747,9 @@ public class MainForm : Form
             StartHotkey = _tabIndex == TabKeys ? cboStartKey.Text : _config.StartHotkey,
             MouseStartHotkey = _tabIndex == TabMouse ? cboStartKey.Text : _config.MouseStartHotkey,
             RecordHotkey = _tabIndex == TabRecord ? cboStartKey.Text : _config.RecordHotkey,
-            PlaybackHotkey = _config.PlaybackHotkey,
+            PlaybackHotkey = _tabIndex == TabRecord ? cboPlayKey.Text : _config.PlaybackHotkey,
+            PlayMode = PlayModeKey(),
+            PlayValue = Math.Max(1, numPlayValue.Value),
             Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
             Keys = _rows.Select(r => new KeyConfig
             {
@@ -763,6 +823,13 @@ public class MainForm : Form
             ApplyMouseStopMode(r, mode, cfg.StopValue);       // 再以配置值收口（最终生效）
         }
 
+        // 回放设置：模式 + 次数/分钟
+        string playMode = _config.PlayMode is "count" or "duration" ? _config.PlayMode : "infinite";
+        cboPlayMode.SelectedIndex = playMode == "count" ? 0 : playMode == "duration" ? 2 : 1;
+        numPlayValue.Max = playMode == "duration" ? 600 : 9999;
+        numPlayValue.SetValue(Math.Clamp(_config.PlayValue, 1, numPlayValue.Max));
+        ApplyPlayMode();
+
         SetKeysUiLocked(_engine.Running);
         SetMouseUiLocked(_mouseEngine.Running);
         RefreshRunCard();
@@ -780,11 +847,14 @@ public class MainForm : Form
         bool okMouse = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_MOUSE, 0, (uint)HotkeyStringToVk(_config.MouseStartHotkey));
         // 录制热键（录制页配置，默认 F9）
         bool okRecord = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_RECORD, 0, (uint)HotkeyStringToVk(_config.RecordHotkey));
+        // 回放热键（录制页配置，默认 F10）
+        bool okPlay = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_PLAY, 0, (uint)HotkeyStringToVk(_config.PlaybackHotkey));
 
         var failed = new List<string>();
         if (!okKeys) failed.Add(_config.StartHotkey);
         if (!okMouse) failed.Add(_config.MouseStartHotkey);
         if (!okRecord) failed.Add(_config.RecordHotkey);
+        if (!okPlay) failed.Add(_config.PlaybackHotkey);
         if (failed.Count > 0)
         {
             string names = string.Join("、", failed);
@@ -799,6 +869,7 @@ public class MainForm : Form
         NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_START);
         NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_MOUSE);
         NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_RECORD);
+        NativeMethods.UnregisterHotKey(Handle, HOTKEY_ID_PLAY);
     }
 
     // ---------- UI 构建 ----------
@@ -893,6 +964,10 @@ public class MainForm : Form
         cboMode.Inner.Items.Add("A 保留原生叠加");
         cboMode.SelectedIndex = 0;
 
+        // 录制页第二行：回放热键（与"连发模式"同位置，按 Tab 二选一显示）
+        cboPlayKey = MakeHotkeySelect(new Point(86, 40));
+        cboPlayKey.Visible = false;
+
         // 自动保存：热键变化需重新注册，模式/其余配置只写文件
         cboStartKey.SelectedIndexChanged += (_, _) =>
         {
@@ -901,6 +976,12 @@ public class MainForm : Form
             RegisterHotkeys();
         };
         cboMode.SelectedIndexChanged += (_, _) => { if (_loading) return; SaveConfig(); };
+        cboPlayKey.SelectedIndexChanged += (_, _) =>
+        {
+            if (_loading || _hotkeySyncing) return;
+            SaveConfig();
+            RegisterHotkeys();
+        };
 
         // B 模式全局拦截提示
         lblModeTip = new Label
@@ -912,7 +993,7 @@ public class MainForm : Form
             Font = new Font(AntStyle.FontName, 8f)
         };
 
-        pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblMode, cboStartKey, cboMode, lblModeTip });
+        pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblMode, cboStartKey, cboMode, cboPlayKey, lblModeTip });
         Controls.Add(pnlSet);
 
         // 点击非输入区域时移除输入框焦点样式（面板类控件点击不会自动夺走焦点）
@@ -1022,18 +1103,23 @@ public class MainForm : Form
     {
         bool mouse = _tabIndex == TabMouse;
         bool record = _tabIndex == TabRecord;
+        bool locked = _recorder != null || _player != null;
 
         lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连发热键";
         _hotkeySyncing = true;
         cboStartKey.Text = record ? _config.RecordHotkey : mouse ? _config.MouseStartHotkey : _config.StartHotkey;
-        cboStartKey.Enabled = _recorder == null;  // 录制中不允许改热键
+        cboPlayKey.Text = _config.PlaybackHotkey;
+        cboStartKey.Enabled = !locked;  // 录制/回放中不允许改热键
+        cboPlayKey.Enabled = !locked;
         _hotkeySyncing = false;
 
-        // 连发模式是按键页专属设置，鼠标页与录制页隐藏
-        lblMode.Visible = !mouse && !record;
+        // 第二行：按键页=连发模式，录制页=回放热键，鼠标页没有这一行
+        lblMode.Text = record ? "回放热键" : "连发模式";
+        lblMode.Visible = !mouse;
         cboMode.Visible = !mouse && !record;
+        cboPlayKey.Visible = record;
         lblModeTip.Text = record
-            ? "录制热键全局开始/结束录制，与连发/连点独立"
+            ? "F9 录制、F10 回放，互不干扰；回放时主窗口收进托盘"
             : mouse
                 ? "连点热键全局开关鼠标连点，与连发热键相互独立"
                 : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
@@ -1267,6 +1353,7 @@ public class MainForm : Form
             Text = "开启后按住对应鼠标键即自动连点，松开即停；滚轮＝滚轮按下（中键）。间隔 100-10000ms，游戏内有效下限 40ms。",
             Location = new Point(16, 168),
             AutoSize = true,
+            MaximumSize = new Size(RowWidth + 12, 0), // 超宽自动换行，不越过窗口右边缘
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
@@ -1325,7 +1412,7 @@ public class MainForm : Form
         {
             Kind = AntButton.AntKind.Primary,
             Text = "● 开始录制",
-            Location = new Point(16, RecListHeight + 38),
+            Location = new Point(16, RecListHeight + 34),
             Size = new Size(112, 30)
         };
         btnRecord.Click += (_, _) => ToggleRecording();
@@ -1334,21 +1421,90 @@ public class MainForm : Form
         lblRecStatus = new Label
         {
             Text = "未录制",
-            Location = new Point(136, RecListHeight + 44),
+            Location = new Point(136, RecListHeight + 40),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary
         };
         page.Controls.Add(lblRecStatus);
 
+        // 回放行：模式 + 数值 + 单位 + 已选方案
+        lblPlay = new Label
+        {
+            Text = "回放",
+            Location = new Point(16, RecListHeight + 73),
+            AutoSize = true,
+            ForeColor = AntStyle.TextSec
+        };
+        cboPlayMode = new AntSelect { Location = new Point(52, RecListHeight + 70), Width = 118 };
+        cboPlayMode.Inner.DropDownWidth = 118;
+        cboPlayMode.Inner.Items.Add("回放 N 次");
+        cboPlayMode.Inner.Items.Add("一直放");
+        cboPlayMode.Inner.Items.Add("定时 N 分钟");
+        cboPlayMode.SelectedIndex = 1; // 默认一直放
+        cboPlayMode.SelectedIndexChanged += (_, _) =>
+        {
+            ApplyPlayMode();
+            if (!_loading) SaveConfig();
+        };
+
+        numPlayValue = new AntNumber
+        {
+            Location = new Point(178, RecListHeight + 67),
+            Size = new Size(80, 28),
+            Step = 1,
+            Min = 1,
+            Max = 9999
+        };
+        numPlayValue.Text = "1";
+        numPlayValue.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
+
+        lblPlayUnit = new Label
+        {
+            Text = "次",
+            Location = new Point(264, RecListHeight + 74),
+            AutoSize = true,
+            ForeColor = AntStyle.TextSec
+        };
+        lblPlayInfo = new Label
+        {
+            Text = "未选方案",
+            Location = new Point(304, RecListHeight + 74),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary
+        };
+
+        page.Controls.AddRange(new Control[] { lblPlay, cboPlayMode, numPlayValue, lblPlayUnit, lblPlayInfo });
+        ApplyPlayMode(); // 初始收口：默认"一直放"隐藏数值框
+
         var lblHint = new Label
         {
-            Text = $"录制时主窗口收进托盘，屏幕右下角留一条状态条（可拖动）；上限 {MacroRecorder.MaxDurationMs / 60000} 分钟 / {MacroRecorder.MaxPoints} 点。F9 开始或结束录制。",
-            Location = new Point(16, RecListHeight + 78),
+            Text = $"录制时主窗口收进托盘，右下角留状态条（可拖动）；上限 {MacroRecorder.MaxDurationMs / 60000} 分钟 / {MacroRecorder.MaxPoints} 点。\r\n" +
+                   $"F9 开始/结束录制，F10 开始/停止回放；回放期间请把游戏切到前台。",
+            Location = new Point(16, RecListHeight + 104),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
         page.Controls.Add(lblHint);
+    }
+
+    /// <summary>回放模式收口：一直放＝隐藏数值框；其余按"次/分钟"给范围与单位。</summary>
+    private void ApplyPlayMode()
+    {
+        bool infinite = cboPlayMode.SelectedIndex == 1;
+        bool timed = cboPlayMode.SelectedIndex == 2;
+
+        numPlayValue.Visible = !infinite;
+        lblPlayUnit.Visible = !infinite;
+        lblPlayUnit.Text = timed ? "分钟" : "次";
+        // 数值框隐藏时把"已选"左移，避免中间空一大块
+        lblPlayInfo.Left = infinite ? 180 : 304;
+
+        if (infinite) return;
+        numPlayValue.Min = 1;
+        numPlayValue.Max = timed ? 600 : 9999;
+        numPlayValue.SetValue(numPlayValue.Value); // 切换模式后按新范围重新钳制
+        numPlayValue.Enabled = _recorder == null && _player == null;
     }
 
     /// <summary>重建方案列表（≤10 行，成本极低，改名/删除后整体重建最省心）。</summary>
@@ -1425,6 +1581,7 @@ public class MainForm : Form
         lblRecEmpty.Visible = _profiles.Count == 0;
         lblRecEmpty.BringToFront();
         UpdateRecordUi();
+        RefreshRunCard(); // 主按钮可用性依赖"有没有选中方案"
     }
 
     /// <summary>单选：点已选中的方案不会取消勾选（等价单选按钮）。</summary>
@@ -1439,6 +1596,8 @@ public class MainForm : Form
         _selectedProfileId = profile.Id;
         foreach (var (p, c) in _recSelection)
             if (p.Id != profile.Id && c.Checked) c.Checked = false;
+        UpdateRecordUi();
+        RefreshRunCard();
     }
 
     private void RenameProfile(RecordProfile profile, AntInput input)
@@ -1498,6 +1657,14 @@ public class MainForm : Form
     private void StartRecording()
     {
         if (_recorder != null) return;
+
+        if (_player != null)
+        {
+            ShowWindow();
+            MessageBox.Show("正在回放轨迹，请先停止回放再录制。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
 
         // 录制期间不能有注入引擎在跑：注入事件虽然带 injected 标志会被过滤，
         // 但连点拦截会吞掉真实点击，轨迹会缺事件
@@ -1595,24 +1762,203 @@ public class MainForm : Form
     private void UpdateRecordUi()
     {
         bool rec = _recorder != null;
+        bool play = _player != null;
+        bool locked = rec || play;
+
         btnRecord.Text = rec ? "■ 停止录制" : "● 开始录制";
         btnRecord.Kind = rec ? AntButton.AntKind.Default : AntButton.AntKind.Primary;
         btnRecord.Danger = rec;
+        btnRecord.Enabled = !play;   // 回放中不能开始录制
         btnRecord.Invalidate();
 
-        lblRecStatus.Text = rec
-            ? "录制中…"
-            : _profiles.Count == 0 ? "未录制" : $"共 {_profiles.Count} 个方案";
-        lblRecStatus.ForeColor = rec ? AntStyle.Danger : AntStyle.TextTertiary;
+        if (rec)
+        {
+            lblRecStatus.Text = "录制中…";
+            lblRecStatus.ForeColor = AntStyle.Danger;
+        }
+        else if (play)
+        {
+            lblRecStatus.ForeColor = AntStyle.Primary; // 进度文案由 _playTimer 刷新
+        }
+        else
+        {
+            lblRecStatus.Text = _profiles.Count == 0 ? "未录制" : $"共 {_profiles.Count} 个方案";
+            lblRecStatus.ForeColor = AntStyle.TextTertiary;
+        }
 
-        foreach (var (_, chk) in _recSelection) chk.Enabled = !rec;
+        foreach (var (_, chk) in _recSelection) chk.Enabled = !locked;
         foreach (var row in _recRowPanels)
             foreach (Control c in row.Controls)
-                if (c is AntInput || c is AntButton) c.Enabled = !rec;
+                if (c is AntInput || c is AntButton) c.Enabled = !locked;
+
+        cboPlayMode.Enabled = !locked;
+        numPlayValue.Enabled = !locked && cboPlayMode.SelectedIndex != 1;
+        lblPlayInfo.Text = DescribeSelection();
 
         if (trayRecordItem != null)
             trayRecordItem.Text = rec ? "停止录制" : "开始录制";
-        if (cboStartKey != null && _tabIndex == TabRecord) cboStartKey.Enabled = !rec;
+        if (trayPlayItem != null)
+        {
+            trayPlayItem.Text = play ? "停止回放" : "开始回放";
+            trayPlayItem.Enabled = play || (!rec && SelectedProfile() != null);
+        }
+        if (cboStartKey != null && _tabIndex == TabRecord) cboStartKey.Enabled = !locked;
+        if (cboPlayKey != null && _tabIndex == TabRecord) cboPlayKey.Enabled = !locked;
+    }
+
+    /// <summary>当前选中的方案（列表单选，<see cref="_selectedProfileId"/> 为空表示没选）。</summary>
+    private RecordProfile? SelectedProfile() =>
+        _profiles.FirstOrDefault(p => p.Id == _selectedProfileId);
+
+    private string DescribeSelection()
+    {
+        var p = SelectedProfile();
+        return p == null ? "未选方案" : $"已选：{p.Name} · {p.DurationMs / 1000.0:0.0}s";
+    }
+
+    private static string FormatDuration(long ms) =>
+        $"{ms / 60000:00}:{ms % 60000 / 1000:00}";
+
+    private string PlayModeKey() => cboPlayMode.SelectedIndex switch
+    {
+        0 => "count",
+        2 => "duration",
+        _ => "infinite"
+    };
+
+    private static string DescribePlayMode(PlayMode mode, int value) => mode switch
+    {
+        PlayMode.Count => $"回放 {value} 次",
+        PlayMode.Duration => $"定时 {value} 分钟",
+        _ => "一直放"
+    };
+
+    // ---------- 回放 ----------
+
+    /// <summary>回放进度：200ms 刷一次「第 N 轮 · mm:ss」，主窗口隐藏时也照常更新。</summary>
+    private void PlayTimer_Tick(object? sender, EventArgs e)
+    {
+        var p = _player;
+        if (p == null)
+        {
+            _playTimer.Stop();
+            return;
+        }
+        lblRecStatus.Text = p.InjectBlocked
+            ? "回放中 · 注入被系统拦截，请以管理员运行"
+            : $"回放中 {p.ProfileName} · 第 {Math.Max(1, p.Loop)} 轮 · {FormatDuration(p.ElapsedMs)}";
+    }
+
+    private void TogglePlayback()
+    {
+        if (_player != null) StopPlayback();
+        else StartPlayback();
+    }
+
+    private void StartPlayback()
+    {
+        if (_player != null) return;
+
+        if (_recorder != null)
+        {
+            ShowWindow();
+            MessageBox.Show("正在录制轨迹，请先结束录制再回放。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var profile = SelectedProfile();
+        if (profile == null)
+        {
+            ShowWindow();
+            MessageBox.Show("请先在列表里勾选一个方案。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (profile.Points.Count == 0)
+        {
+            ShowWindow();
+            MessageBox.Show($"{profile.Name} 里没有轨迹点，请重新录制。", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var mode = PlayModeKey() switch
+        {
+            "count" => PlayMode.Count,
+            "duration" => PlayMode.Duration,
+            _ => PlayMode.Infinite
+        };
+        int value = mode == PlayMode.Infinite ? 0 : Math.Max(1, numPlayValue.Value);
+
+        var player = new MacroPlayer();
+        _player = player;
+        // 回调在工作线程：切回 UI 线程收尾
+        player.Finished += () =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try { BeginInvoke(new Action(OnPlaybackFinished)); }
+            catch (Exception ex) { Logger.Error("PlaybackFinished", ex); }
+        };
+
+        try
+        {
+            player.Start(profile, mode, value);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("StartPlayback", ex);
+            _player = null;
+            player.Dispose();
+            UpdateRecordUi();
+            RefreshRunCard();
+            MessageBox.Show("开始回放失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        Logger.Info($"开始回放：{profile.Name} {DescribePlayMode(mode, value)}");
+        _playTimer.Start();
+        UpdateRecordUi();
+        RefreshRunCard();
+        Hide(); // 与连发一致：让游戏拿到焦点
+
+        // 录制与当前虚拟桌面不一致时只提示、不阻止（换过分辨率/显示器的情况很常见）
+        var v = NativeInput.VirtualScreen();
+        var rs = profile.Screen;
+        string warn = rs.W > 0 && (rs.X != v.X || rs.Y != v.Y || rs.W != v.Width || rs.H != v.Height)
+            ? $"\n注意：录制时桌面 {rs.W}×{rs.H}，当前 {v.Width}×{v.Height}，回放位置可能有偏移。"
+            : "";
+        trayIcon.ShowBalloonTip(2400, "轨迹回放",
+            $"正在回放 {profile.Name}（{DescribePlayMode(mode, value)}），按 {_config.PlaybackHotkey} 可停止。{warn}",
+            ToolTipIcon.Info);
+    }
+
+    private void StopPlayback()
+    {
+        var player = _player;
+        if (player == null) return;
+        _player = null;      // 先摘引用：Finished 回来时按"手动停止"处理
+        _playTimer.Stop();
+        player.Stop();       // 线程内补发抬起，避免卡键
+        player.Dispose();
+        UpdateRecordUi();
+        RefreshRunCard();
+        UpdateStatus("回放已停止");
+        Logger.Info("回放已手动停止");
+    }
+
+    /// <summary>回放自然结束（次数跑完 / 定时到点）：引擎已自行收尾，这里把界面拉回停止态。</summary>
+    private void OnPlaybackFinished()
+    {
+        if (_player == null) return; // 手动停止的收尾已在 StopPlayback 里做过
+        var player = _player;
+        _player = null;
+        _playTimer.Stop();
+        player.Dispose();
+        UpdateRecordUi();
+        RefreshRunCard();
+        Logger.Info("回放完成");
+        trayIcon.ShowBalloonTip(1800, "轨迹回放", "回放已结束。", ToolTipIcon.Info);
     }
 
     /// <summary>按停止条件模式调整数值框：auto=自动点击(0 = 无限，1-100000)显示可编辑，infinite(松手停止)=隐藏。</summary>
@@ -1636,6 +1982,12 @@ public class MainForm : Form
         trayRecordItem = new ToolStripMenuItem("开始录制");
         trayRecordItem.Click += (_, _) => ToggleRecording();
         trayMenu.Items.Add(trayRecordItem);
+
+        // 回放期间主窗口在托盘里，这里留一个出口（热键注册失败时也能停）
+        trayPlayItem = new ToolStripMenuItem("开始回放");
+        trayPlayItem.Click += (_, _) => TogglePlayback();
+        trayMenu.Items.Add(trayPlayItem);
+
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("退出程序", null, (_, _) => ExitApp());
 

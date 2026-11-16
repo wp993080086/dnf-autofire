@@ -189,9 +189,9 @@ internal static class NativeInput
 
     /// <summary>
     /// 发送鼠标按下/抬起事件（button 为 VK_LBUTTON / VK_RBUTTON / VK_MBUTTON；up=true 抬起）。
-    /// 位置为当前光标处。
+    /// 位置为当前光标处。返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。
     /// </summary>
-    public static void SendMouseButton(int button, bool up)
+    public static bool SendMouseButton(int button, bool up)
     {
         uint flag = button switch
         {
@@ -209,7 +209,7 @@ internal static class NativeInput
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };
-        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
+        return NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>()) == 1;
     }
 
     /// <summary>当前虚拟桌面范围（物理像素，多屏可能含负坐标）。</summary>
@@ -222,8 +222,9 @@ internal static class NativeInput
     /// <summary>
     /// 绝对定位光标：把物理像素坐标归一化到虚拟桌面（0–65535）。
     /// 不用 SetCursorPos——它不产生标准输入事件，且不同 DPI 感知下语义不一致。
+    /// 返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。
     /// </summary>
-    public static void SendMouseMoveAbsolute(int x, int y)
+    public static bool SendMouseMoveAbsolute(int x, int y)
     {
         var v = VirtualScreen();
         int vw = Math.Max(2, v.Width), vh = Math.Max(2, v.Height);
@@ -240,6 +241,6 @@ internal static class NativeInput
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };
-        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
+        return NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>()) == 1;
     }
 }

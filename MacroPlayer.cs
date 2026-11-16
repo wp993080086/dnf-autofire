@@ -1,0 +1,292 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
+namespace DnfAutoFire;
+
+/// <summary>回放模式：回放 N 次 / 一直放 / 定时 N 分钟。</summary>
+internal enum PlayMode { Count, Infinite, Duration }
+
+/// <summary>
+/// 轨迹回放器：独立高精度线程按录制时间轴注入鼠标事件。
+/// 与录制对称——录的是「相对开始时间的物理坐标 + 事件类型」，放的时候按同一时间轴重放。
+///
+/// 几个刻意为之的细节：
+/// - 定位用 MOUSEEVENTF_ABSOLUTE + VIRTUALDESK 归一化（不用 SetCursorPos），
+///   多屏含负坐标、125% 缩放下都与录制时的物理像素一致。
+/// - 相邻两次移动间隔 &gt;32ms 且位移 &gt;4px 时按 16ms 步长插值：游戏按帧轮询光标，
+///   直接瞬移可能整段跳过，插值后至少每帧有一个位置。
+/// - 按下/抬起间隔 &lt;20ms 时补到 20ms（与连发引擎同一个下限结论：一帧 60fps≈16.7ms）。
+/// - 停止时补发所有处于按下状态的键，避免"回放停在按住那一帧"导致卡键。
+/// </summary>
+internal sealed class MacroPlayer : IDisposable
+{
+    public const int LoopGapMs = 300;     // 轮与轮之间留一点空隙，避免尾巴贴着头
+    private const int MinHoldMs = 20;     // 按下保持下限
+    private const int InterpGapMs = 32;   // 相邻移动间隔超过它才插值
+    private const int InterpStepMs = 16;  // 插值步长（对齐 60fps 轮询）
+    private const int InterpMinPx2 = 16;  // 位移平方（4px）：太小不动也没必要插
+
+    // 测试用：DNF_DRYRUN=1 时只跑时间轴、不注入任何输入
+    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
+
+    private readonly object _sync = new();
+    private readonly HashSet<int> _pressed = new(); // 当前处于按下状态的鼠标键（VK）
+    private Thread? _worker;
+    private volatile bool _stop;
+    private volatile bool _running;
+    private Stopwatch _sw = new();
+    private RecordProfile? _profile;
+    private PlayMode _mode;
+    private int _value;   // Count=次数，Duration=分钟，Infinite 忽略
+    private int _loop;
+    private int _sent;
+    private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
+
+    public bool Running => _running;
+
+    /// <summary>注入被系统拦截（常见于未以管理员运行、或目标窗口权限更高）。</summary>
+    public bool InjectBlocked => _blocked;
+
+    /// <summary>已完成轮数（第一轮进行中为 0）。</summary>
+    public int Loop => Volatile.Read(ref _loop);
+
+    public long ElapsedMs => _sw.ElapsedMilliseconds;
+
+    public string ProfileName => _profile?.Name ?? "";
+
+    /// <summary>当前轮已回放的点数（进度展示用）。</summary>
+    public int SentPoints => Volatile.Read(ref _sent);
+
+    /// <summary>回放自然结束（跑完次数 / 定时到点）时在工作线程上触发；手动 Stop 不触发语义上的"完成"。</summary>
+    public event Action? Finished;
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeBeginPeriod(uint ms);
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeEndPeriod(uint ms);
+
+    public void Start(RecordProfile profile, PlayMode mode, int value)
+    {
+        Stop();
+        _profile = profile;
+        _mode = mode;
+        _value = Math.Max(1, value);
+        _loop = 0;
+        _sent = 0;
+        _stop = false;
+        _running = true;
+        _sw = Stopwatch.StartNew();
+
+        timeBeginPeriod(1); // Sleep(1) 才真正约 1ms
+        try
+        {
+            _worker = new Thread(Run) { IsBackground = true, Name = "MacroPlayer" };
+            _worker.Start();
+        }
+        catch
+        {
+            timeEndPeriod(1); // 线程没起来就自己还回去，别让 finally 再减一次
+            _running = false;
+            throw;
+        }
+    }
+
+    public void Stop()
+    {
+        _stop = true;
+        try { _worker?.Join(1500); } catch { /* 线程可能尚未启动 */ }
+        _worker = null;
+        ReleaseAll(); // 兜底：线程已退出但仍有键处于按下状态
+        _running = false;
+    }
+
+    public void Dispose() => Stop();
+
+    private void Run()
+    {
+        var profile = _profile!;
+        int totalMs = _mode == PlayMode.Duration ? _value * 60000 : int.MaxValue;
+        int loops = 0;
+
+        try
+        {
+            while (!_stop)
+            {
+                int loopStart = (int)_sw.ElapsedMilliseconds;
+                PlayOnce(profile, loopStart, totalMs);
+
+                if (_stop) break;
+
+                loops++;
+                Volatile.Write(ref _loop, loops);
+                if (_mode == PlayMode.Count && loops >= _value) break;
+
+                int now = (int)_sw.ElapsedMilliseconds;
+                if (_mode == PlayMode.Duration)
+                {
+                    if (now >= totalMs) break;
+                    WaitUntil(Math.Min(now + LoopGapMs, totalMs));
+                }
+                else
+                {
+                    WaitUntil(now + LoopGapMs);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("MacroPlayer.Run", ex);
+        }
+        finally
+        {
+            ReleaseAll();
+            _running = false;
+            timeEndPeriod(1);
+            if (DryRun) Logger.Info($"[dry] 回放结束：{profile.Name} {loops} 轮 {_sent} 点 {_sw.ElapsedMilliseconds}ms");
+            try { Finished?.Invoke(); } catch (Exception ex) { Logger.Error("MacroPlayer.Finished", ex); }
+        }
+    }
+
+    /// <summary>回放一轮：按相对时间轴逐点等待并注入。定时模式会在半轮处截断。</summary>
+    private void PlayOnce(RecordProfile profile, int loopStart, int totalMs)
+    {
+        var pts = profile.Points;
+        int cx = int.MinValue, cy = int.MinValue; // 上次注入的光标位置（省略重复移动）
+        int downVk = 0, downAt = 0;
+
+        for (int i = 0; i < pts.Count; i++)
+        {
+            if (_stop) return;
+            if (_mode == PlayMode.Duration && _sw.ElapsedMilliseconds >= totalMs) return;
+
+            var p = pts[i];
+            WaitUntil(loopStart + p.T);
+            if (_stop) return;
+
+            switch (p.K)
+            {
+                case RecordKind.Move:
+                    MoveTo(p.X, p.Y, ref cx, ref cy);
+
+                    // 段间插值：慢速大跨度移动补中间点，避免游戏里"瞬移"
+                    if (i + 1 < pts.Count && pts[i + 1].K == RecordKind.Move)
+                    {
+                        var next = pts[i + 1];
+                        int dt = next.T - p.T;
+                        int dx = next.X - p.X, dy = next.Y - p.Y;
+                        if (dt >= InterpGapMs && dx * dx + dy * dy >= InterpMinPx2)
+                        {
+                            int steps = Math.Max(1, dt / InterpStepMs);
+                            for (int s = 1; s < steps; s++)
+                            {
+                                if (_stop) return;
+                                if (_mode == PlayMode.Duration && _sw.ElapsedMilliseconds >= totalMs) return;
+                                WaitUntil(loopStart + p.T + s * InterpStepMs);
+                                MoveTo(p.X + dx * s / steps, p.Y + dy * s / steps, ref cx, ref cy);
+                            }
+                        }
+                    }
+                    break;
+
+                case RecordKind.LeftDown:
+                case RecordKind.RightDown:
+                case RecordKind.MiddleDown:
+                    // 按下点自带坐标：先对准再按下（录制时可能没有紧邻的 Move）
+                    if (p.X != cx || p.Y != cy) MoveTo(p.X, p.Y, ref cx, ref cy);
+                    downVk = DownToVk(p.K);
+                    SendButton(downVk, up: false);
+                    downAt = (int)_sw.ElapsedMilliseconds;
+                    break;
+
+                case RecordKind.LeftUp:
+                case RecordKind.RightUp:
+                case RecordKind.MiddleUp:
+                    int upVk = UpToVk(p.K);
+                    if (downVk == upVk)
+                    {
+                        // 按住时间过短时补到 20ms，否则游戏可能整段错过这一下
+                        if ((int)_sw.ElapsedMilliseconds - downAt < MinHoldMs)
+                            WaitUntil(downAt + MinHoldMs);
+                        downVk = 0;
+                    }
+                    SendButton(upVk, up: true);
+                    break;
+            }
+
+            Volatile.Write(ref _sent, i + 1);
+        }
+
+        // 一轮结束还有键没抬起（录制被截断）：补一次抬起，避免带到下一轮
+        if (downVk != 0) SendButton(downVk, up: true);
+    }
+
+    /// <summary>等到时间轴的某个绝对毫秒点；轮询粒度 1ms，_stop 时立刻返回。</summary>
+    private void WaitUntil(int targetMs)
+    {
+        while (!_stop)
+        {
+            int left = targetMs - (int)_sw.ElapsedMilliseconds;
+            if (left <= 0) return;
+            Thread.Sleep(1);
+        }
+    }
+
+    private void MoveTo(int x, int y, ref int cx, ref int cy)
+    {
+        if (x == cx && y == cy) return;
+        cx = x;
+        cy = y;
+        if (DryRun) return;
+        if (!NativeInput.SendMouseMoveAbsolute(x, y)) MarkBlocked();
+    }
+
+    private void SendButton(int vk, bool up)
+    {
+        lock (_sync)
+        {
+            if (up) _pressed.Remove(vk);
+            else _pressed.Add(vk);
+        }
+        if (DryRun) return;
+        if (!NativeInput.SendMouseButton(vk, up)) MarkBlocked();
+    }
+
+    /// <summary>只在第一次失败时记日志，避免一分钟写几万行。</summary>
+    private void MarkBlocked()
+    {
+        if (_blocked) return;
+        _blocked = true;
+        Logger.Error("MacroPlayer", new InvalidOperationException(
+            "鼠标注入被系统拦截（SendInput 返回 0）。请以管理员身份运行；若游戏以更高权限启动，注入无法生效。"));
+    }
+
+    private void ReleaseAll()
+    {
+        int[] keys;
+        lock (_sync)
+        {
+            keys = _pressed.ToArray();
+            _pressed.Clear();
+        }
+        if (DryRun || keys.Length == 0) return;
+        foreach (var vk in keys)
+        {
+            try { NativeInput.SendMouseButton(vk, up: true); } catch { /* 尽力释放 */ }
+        }
+    }
+
+    private static int DownToVk(int kind) => kind switch
+    {
+        RecordKind.RightDown => NativeMethods.VK_RBUTTON,
+        RecordKind.MiddleDown => NativeMethods.VK_MBUTTON,
+        _ => NativeMethods.VK_LBUTTON
+    };
+
+    private static int UpToVk(int kind) => kind switch
+    {
+        RecordKind.RightUp => NativeMethods.VK_RBUTTON,
+        RecordKind.MiddleUp => NativeMethods.VK_MBUTTON,
+        _ => NativeMethods.VK_LBUTTON
+    };
+}

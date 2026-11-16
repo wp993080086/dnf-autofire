@@ -54,6 +54,36 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --playtest <方案名> <值> [count|infinite|duration] [最长秒数]
+        // 按指定模式回放，到点/跑完即退出（配 DNF_DRYRUN=1 只跑时间轴不注入鼠标）
+        if (args.Length >= 4 && args[1] == "--playtest")
+        {
+            var form = new MainForm();
+            form.Show();
+            form.DebugPlayTest(
+                args[2],
+                int.TryParse(args[3], out int pv) ? pv : 1,
+                args.Length >= 5 ? args[4] : "count",
+                args.Length >= 6 && int.TryParse(args[5], out int pg) ? pg : 30);
+            Application.Run(form);
+            return;
+        }
+
+        // 调试用：dnf-autofire --movetest <x> <y> 注入一次绝对定位并回报光标实际落点
+        // （验证当前环境是否允许注入；结果与虚拟桌面范围一起写日志）
+        if (args.Length >= 4 && args[1] == "--movetest")
+        {
+            int mx = int.TryParse(args[2], out int tx) ? tx : 100;
+            int my = int.TryParse(args[3], out int ty) ? ty : 100;
+            var before = Cursor.Position;
+            bool ok = NativeInput.SendMouseMoveAbsolute(mx, my);
+            Thread.Sleep(200);
+            var after = Cursor.Position;
+            var v = NativeInput.VirtualScreen();
+            Logger.Info($"[movetest] 目标={mx},{my} 注入={ok} 前={before.X},{before.Y} 后={after.X},{after.Y} 虚拟桌面={v.X},{v.Y} {v.Width}x{v.Height}");
+            return;
+        }
+
         // 调试用：dnf-autofire --mouselayout 打印鼠标页行内控件边界
         if (args.Length >= 2 && args[1] == "--mouselayout")
         {

@@ -4,13 +4,13 @@ namespace DnfAutoFire;
 
 /// <summary>
 /// 录制状态悬浮条：主窗口收进托盘后，屏幕上留一条小的置顶提示。
-/// 显示红点（闪烁）/「录制中」/ 计时 / 点数 / ■ 停止；可拖动，右上角位置默认贴工作区右下角。
+/// 显示红点（闪烁）/「录制中」/ 计时 / ■ 停止；可拖动，右上角位置默认贴工作区右下角。
 /// 悬浮条自身的矩形会作为「排除区域」交给录制器，所以拖它、点■都不会进录制。
 /// </summary>
 internal sealed class RecordOverlayForm : Form
 {
     private const int DotSize = 8;
-    private static readonly Rectangle StopRect = new(200, 11, 22, 22);
+    private static readonly Rectangle StopRect = new(156, 11, 22, 22);
     private static readonly Color RecordRed = Color.FromArgb(255, 77, 79);
     private static readonly Color RecordRedBg = Color.FromArgb(255, 241, 240);
 
@@ -23,7 +23,7 @@ internal sealed class RecordOverlayForm : Form
     private Point _dragOrigin;
     private bool _closingSilently;
 
-    /// <summary>点■、或点数/时长触顶时触发；由主窗口统一走停止流程。</summary>
+    /// <summary>点■、或时长触顶时触发；由主窗口统一走停止流程。</summary>
     public event Action? StopRequested;
 
     /// <summary>拖动结束后触发，调用方据此刷新排除区域。</summary>
@@ -40,7 +40,7 @@ internal sealed class RecordOverlayForm : Form
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
         BackColor = Color.White;
-        ClientSize = new Size(236, 44);
+        ClientSize = new Size(200, 44);
 
         var work = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
         Location = new Point(work.Right - Width - 24, work.Bottom - Height - 24);
@@ -104,16 +104,11 @@ internal sealed class RecordOverlayForm : Form
             g.FillEllipse(dot, 14, (Height - DotSize) / 2, DotSize, DotSize);
 
         using var boldFont = new Font(AntStyle.FontName, 9f, FontStyle.Bold);
-        using var font8 = new Font(AntStyle.FontName, 8f);
         TextRenderer.DrawText(g, "录制中", boldFont, new Rectangle(30, 0, 60, Height), RecordRed,
             TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
         TextRenderer.DrawText(g, FormatElapsed(_recorder.ElapsedMs), boldFont,
             new Rectangle(86, 0, 60, Height), AntStyle.TextPri,
-            TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
-
-        TextRenderer.DrawText(g, "· " + _recorder.PointCount + " 点", font8,
-            new Rectangle(146, 0, 52, Height), AntStyle.TextTertiary,
             TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
         // ■ 停止

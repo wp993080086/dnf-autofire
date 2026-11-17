@@ -288,7 +288,7 @@ public class MainForm : Form
     /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
     internal void DebugEngineTest(string mode, int seconds)
     {
-        cboMode.SelectedIndex = mode == "A" ? 1 : 0;
+        cboMode.SelectedIndex = mode == "A" ? 0 : 1;
         var t = new System.Windows.Forms.Timer { Interval = 800 };
         t.Tick += (_, _) =>
         {
@@ -491,7 +491,7 @@ public class MainForm : Form
             return;
         }
 
-        _engine.Mode = cboMode.SelectedIndex == 0 ? "B" : "A";
+        _engine.Mode = cboMode.SelectedIndex == 0 ? "A" : "B";
         try
         {
             _engine.Start(targets);
@@ -727,7 +727,7 @@ public class MainForm : Form
     /// <summary>状态栏：两个引擎各自的运行状态，独立开关一目了然。</summary>
     private void RefreshStatus()
     {
-        string keys = _engine.Running ? $"按键连发 运行中({_engine.Mode})" : "按键连发 未开启";
+        string keys = _engine.Running ? $"按键连发 运行中（{(_engine.Mode == "A" ? "保留原生" : "拦截原生")}）" : "按键连发 未开启";
         string mouse = _mouseEngine.Running ? "鼠标连点 运行中" : "鼠标连点 未开启";
         UpdateStatus($"{keys} · {mouse}");
     }
@@ -844,8 +844,8 @@ public class MainForm : Form
             PlaybackHotkey = _tabIndex == TabRecord ? cboPlayKey.Text : _config.PlaybackHotkey,
             PlayMode = PlayModeKey(),
             PlayValue = Math.Max(1, numPlayValue.Value),
-            PlayGapMs = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapMs),
-            Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
+            PlayGapSec = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapSec),
+            Mode = cboMode.SelectedIndex == 0 ? "A" : "B",
             Keys = _rows.Select(r => new KeyConfig
             {
                 Key = r.TxtKey.Text.Trim().ToUpper(),
@@ -897,7 +897,7 @@ public class MainForm : Form
         RelayoutRows();
         UpdateRowButtons();
         cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连发热键
-        cboMode.SelectedIndex = _config.Mode == "A" ? 1 : 0;
+        cboMode.SelectedIndex = _config.Mode == "A" ? 0 : 1;
 
         // 鼠标连点行：固定左/右/滚轮三行，按 Button 匹配配置
         var mouseCfg = _config.MouseClicks ?? new List<MouseClickConfig>();
@@ -923,7 +923,7 @@ public class MainForm : Form
         cboPlayMode.SelectedIndex = playMode == "count" ? 0 : playMode == "duration" ? 2 : 1;
         numPlayValue.Max = playMode == "duration" ? 600 : 9999;
         numPlayValue.SetValue(Math.Clamp(_config.PlayValue, 1, numPlayValue.Max));
-        numPlayGap.SetValue(Math.Clamp(_config.PlayGapMs, 0, MacroPlayer.MaxGapMs));
+        numPlayGap.SetValue(Math.Clamp(_config.PlayGapSec, 0, MacroPlayer.MaxGapSec));
         ApplyPlayMode();
 
         SetKeysUiLocked(_engine.Running);
@@ -1078,9 +1078,9 @@ public class MainForm : Form
         cboStartKey = MakeHotkeySelect(new Point(86, 8));
         cboMode = new AntSelect { Location = new Point(86, 40), Width = 120 };
         cboMode.Inner.DropDownWidth = 120;
-        cboMode.Inner.Items.Add("B 拦截原生");
-        cboMode.Inner.Items.Add("A 保留原生叠加");
-        cboMode.SelectedIndex = 0;
+        cboMode.Inner.Items.Add("保留原生");
+        cboMode.Inner.Items.Add("拦截原生");
+        cboMode.SelectedIndex = 1; // 默认拦截原生：物理按键不进游戏，避免和模拟连发打架
 
         // 录制页第二行：回放热键（与"连发模式"同位置，按 Tab 二选一显示）
         cboPlayKey = MakeHotkeySelect(new Point(86, 40));
@@ -1093,7 +1093,12 @@ public class MainForm : Form
             SaveConfig();
             RegisterHotkeys();
         };
-        cboMode.SelectedIndexChanged += (_, _) => { if (_loading) return; SaveConfig(); };
+        cboMode.SelectedIndexChanged += (_, _) =>
+        {
+            ApplyKeyModeTip();
+            if (_loading) return;
+            SaveConfig();
+        };
         cboPlayKey.SelectedIndexChanged += (_, _) =>
         {
             if (_loading || _hotkeySyncing) return;
@@ -1101,10 +1106,10 @@ public class MainForm : Form
             RegisterHotkeys();
         };
 
-        // B 模式全局拦截提示
+        // 模式说明（跟着下拉框当前选项变）
         lblModeTip = new Label
         {
-            Text = "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1",
+            Text = "",
             Location = new Point(14, 70),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
@@ -1113,6 +1118,7 @@ public class MainForm : Form
 
         pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblMode, cboStartKey, cboMode, cboPlayKey, lblModeTip });
         Controls.Add(pnlSet);
+        ApplyKeyModeTip();
 
         // 点击非输入区域时移除输入框焦点样式（面板类控件点击不会自动夺走焦点）
         AttachClearFocus(Controls);
@@ -1240,7 +1246,8 @@ public class MainForm : Form
             ? "F9 录制、F10 回放，互不干扰；回放时主窗口收进托盘"
             : mouse
                 ? "连点热键全局开关鼠标连点，与连发热键相互独立"
-                : "B 模式全局拦截目标键；间隔范围 50-5000ms，步进 1";
+                : "";
+        if (!record && !mouse) ApplyKeyModeTip(); // 按键页：说明跟着「保留原生 / 拦截原生」走
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)
@@ -1328,12 +1335,25 @@ public class MainForm : Form
         var lblTitle = new Label
         {
             Text = "按键配置",
-            Location = new Point(16, 12),
+            Location = new Point(16, 11),
             AutoSize = true,
             ForeColor = AntStyle.TextPri,
-            Font = new Font(AntStyle.FontName, 9.5f)
+            Font = new Font(AntStyle.FontName, 10.5f)
         };
         page.Controls.Add(lblTitle);
+
+        // 间隔范围说明跟着标题走（原来挤在右下角模式提示里）
+        var titleSize = RowTextSize("按键配置", 10.5f);
+        var rangeSize = RowTextSize($"间隔范围 {MinMs}-{MaxMs}ms，步进 1", 8f);
+        var lblRange = new Label
+        {
+            Text = $"间隔范围 {MinMs}-{MaxMs}ms，步进 1",
+            Location = new Point(16 + titleSize.Width + 12, 11 + (titleSize.Height - rangeSize.Height) / 2),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 8f)
+        };
+        page.Controls.Add(lblRange);
 
         pnlRows = new Panel
         {
@@ -1584,7 +1604,7 @@ public class MainForm : Form
             ForeColor = AntStyle.TextSec
         };
 
-        // 回放间隔：两轮之间等多久（默认 1000ms = 1 秒，0 = 轮尾直接接轮头）
+        // 回放间隔：两轮之间等多久（默认 1 秒，0 = 轮尾直接接轮头）
         lblGap = new Label
         {
             Text = "间隔",
@@ -1598,13 +1618,13 @@ public class MainForm : Form
             Size = new Size(84, 28),
             Step = 1,
             Min = 0,
-            Max = MacroPlayer.MaxGapMs
+            Max = MacroPlayer.MaxGapSec
         };
-        numPlayGap.Text = MacroPlayer.DefaultGapMs.ToString();
+        numPlayGap.Text = MacroPlayer.DefaultGapSec.ToString();
         numPlayGap.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
         lblGapUnit = new Label
         {
-            Text = "毫秒",
+            Text = "秒",
             Location = new Point(420, RecListHeight + 74),
             AutoSize = true,
             ForeColor = AntStyle.TextSec
@@ -1627,8 +1647,8 @@ public class MainForm : Form
 
         var lblHint = new Label
         {
-            Text = $"录制时主窗口收进托盘，右下角留状态条（可拖动）；上限 {MacroRecorder.MaxDurationMs / 60000} 分钟 / {MacroRecorder.MaxPoints} 点。\r\n" +
-                   $"F9 开始/结束录制，F10 开始/停止回放（回放时把游戏切到前台）；间隔＝两轮之间的等待，0 为不等待。",
+            Text = $"录制时主窗口收进托盘，右下角留状态条；单次录制上限 {MacroRecorder.MaxDurationMs / 60000} 分钟。\r\n" +
+                   $"F9 开始/结束录制，F10 开始/停止回放；间隔＝两轮之间的等待，0 为不等待。",
             Location = new Point(16, RecListHeight + 104),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
@@ -1656,6 +1676,15 @@ public class MainForm : Form
         numPlayValue.Max = timed ? 600 : 9999;
         numPlayValue.SetValue(numPlayValue.Value); // 切换模式后按新范围重新钳制
         numPlayValue.Enabled = _recorder == null && _player == null;
+    }
+
+    /// <summary>连发模式说明：跟着下拉框当前选项走（原来固定写着 B 模式的长句）。</summary>
+    private void ApplyKeyModeTip()
+    {
+        if (lblModeTip == null || cboMode == null) return;
+        lblModeTip.Text = cboMode.SelectedIndex == 0
+            ? "保留原生：放行物理按键，叠加模拟连按"
+            : "拦截原生：拦下物理按键，只发模拟连按";
     }
 
     /// <summary>重建方案列表（≤10 行，成本极低，改名/删除后整体重建最省心）。</summary>
@@ -1688,7 +1717,8 @@ public class MainForm : Form
             var name = new AntInput
             {
                 Location = new Point(26, 1),
-                Size = new Size(140, 28)
+                Size = new Size(140, 28),
+                TextInset = 8          // 名字贴边框太挤，左右各留 8px
             };
             name.Inner.MaxLength = 20;
             name.Text = profile.Name;
@@ -2076,7 +2106,7 @@ public class MainForm : Form
             _ => PlayMode.Infinite
         };
         int value = mode == PlayMode.Infinite ? 0 : Math.Max(1, numPlayValue.Value);
-        int gap = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapMs);
+        int gapSec = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapSec);
 
         var player = new MacroPlayer();
         _player = player;
@@ -2090,7 +2120,7 @@ public class MainForm : Form
 
         try
         {
-            player.Start(profile, mode, value, gap);
+            player.Start(profile, mode, value, gapSec);
         }
         catch (Exception ex)
         {
@@ -2103,7 +2133,7 @@ public class MainForm : Form
             return;
         }
 
-        Logger.Info($"开始回放：{profile.Name} {DescribePlayMode(mode, value)} 间隔 {gap}ms");
+        Logger.Info($"开始回放：{profile.Name} {DescribePlayMode(mode, value)} 间隔 {gapSec} 秒");
         _playTimer.Start();
         UpdateRecordUi();
         RefreshRunCard();
@@ -2577,11 +2607,16 @@ public class MainForm : Form
     }
 
     /// <summary>行内文字实测宽度：Label.AutoSize 要挂到父控件后才生效，布局阶段必须自己量。</summary>
-    private static int RowTextWidth(string text, bool bold = false)
+    private static int RowTextWidth(string text, bool bold = false) => RowTextWidth(text, 9f, bold);
+
+    /// <summary>指定字号的实测尺寸（标题这类非常规字号用，去掉 MeasureText 自带的左右留白）。</summary>
+    private static Size RowTextSize(string text, float size, bool bold = false)
     {
-        using var font = bold ? new Font(AntStyle.FontName, 9f, FontStyle.Bold) : new Font(AntStyle.FontName, 9f);
-        return TextRenderer.MeasureText(text, font).Width;
+        using var font = bold ? new Font(AntStyle.FontName, size, FontStyle.Bold) : new Font(AntStyle.FontName, size);
+        return TextRenderer.MeasureText(text, font, Size.Empty, TextFormatFlags.NoPadding);
     }
+
+    private static int RowTextWidth(string text, float size, bool bold = false) => RowTextSize(text, size, bold).Width;
 
     private static int NormalizeMs(string text)
     {

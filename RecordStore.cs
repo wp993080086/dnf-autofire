@@ -47,9 +47,9 @@ public class RecordProfile
     [JsonPropertyName("screen")] public RecordScreen Screen { get; set; } = new();
     [JsonPropertyName("points")] public List<RecordPoint> Points { get; set; } = new();
 
-    /// <summary>列表里显示的摘要："12.4s · 386 点"。</summary>
+    /// <summary>列表里显示的摘要："12.4s"（采样点数对用户没意义，不展示）。</summary>
     [JsonIgnore]
-    public string Summary => $"{DurationMs / 1000.0:0.0}s · {Points.Count} 点";
+    public string Summary => $"{DurationMs / 1000.0:0.0}s";
 }
 
 /// <summary>recordings.json 的根结构。<c>version</c> 预留：将来加滚轮/键盘事件时按版本升级。</summary>

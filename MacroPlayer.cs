@@ -16,13 +16,13 @@ internal enum PlayMode { Count, Infinite, Duration }
 /// - 相邻两次移动间隔 &gt;32ms 且位移 &gt;4px 时按 16ms 步长插值：游戏按帧轮询光标，
 ///   直接瞬移可能整段跳过，插值后至少每帧有一个位置。
 /// - 按下/抬起间隔 &lt;20ms 时补到 20ms（与连发引擎同一个下限结论：一帧 60fps≈16.7ms）。
-/// - 轮与轮之间按「回放间隔」等待（默认 1000ms，可设 0 = 轮尾直接接轮头）。
+/// - 轮与轮之间按「回放间隔」等待（默认 1 秒，可设 0 = 轮尾直接接轮头）。
 /// - 停止时补发所有处于按下状态的键，避免"回放停在按住那一帧"导致卡键。
 /// </summary>
 internal sealed class MacroPlayer : IDisposable
 {
-    public const int DefaultGapMs = 1000;  // 回放间隔默认 1 秒
-    public const int MaxGapMs = 999999;    // 回放间隔上限（约 16.7 分钟）
+    public const int DefaultGapSec = 1;    // 回放间隔默认 1 秒
+    public const int MaxGapSec = 999999;   // 回放间隔上限（秒，约 11.5 天）
     private const int MinHoldMs = 20;     // 按下保持下限
     private const int InterpGapMs = 32;   // 相邻移动间隔超过它才插值
     private const int InterpStepMs = 16;  // 插值步长（对齐 60fps 轮询）
@@ -43,7 +43,7 @@ internal sealed class MacroPlayer : IDisposable
     private int _loop;
     private int _current; // 正在进行（或刚放完）的是第几次，第 1 次进行中 = 1
     private int _sent;
-    private int _gapMs = DefaultGapMs;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
+    private int _gapMs = DefaultGapSec * 1000;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
     private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
 
     public bool Running => _running;
@@ -73,13 +73,14 @@ internal sealed class MacroPlayer : IDisposable
     [DllImport("winmm.dll")]
     private static extern uint timeEndPeriod(uint ms);
 
-    public void Start(RecordProfile profile, PlayMode mode, int value, int gapMs = DefaultGapMs)
+    public void Start(RecordProfile profile, PlayMode mode, int value, int gapSec = DefaultGapSec)
     {
         Stop();
         _profile = profile;
         _mode = mode;
         _value = Math.Max(1, value);
-        _gapMs = Math.Clamp(gapMs, 0, MaxGapMs);
+        // 界面按「秒」填，时间轴内部仍是毫秒：999999 秒 ≈ 1.0e9 ms，不会溢出
+        _gapMs = Math.Clamp(gapSec, 0, MaxGapSec) * 1000;
         _loop = 0;
         _current = 0;
         _sent = 0;

@@ -295,10 +295,25 @@ internal class AntInput : Panel
     /// <summary>右侧为附加元素（如数字步进按钮）预留的宽度。</summary>
     protected virtual int RightInset => 0;
 
+    /// <summary>文本与左右边框的水平内边距（默认 1px，贴边；方案名这类编辑框给 8px 更宽松）。</summary>
+    public int TextInset
+    {
+        get => _textInset;
+        set
+        {
+            int v = Math.Max(0, value);
+            if (v == _textInset) return;
+            _textInset = v;
+            LayoutInner();
+        }
+    }
+
+    private int _textInset = 1;
+
     private void LayoutInner()
     {
-        Inner.Location = new Point(1, Math.Max(1, (Height - Inner.Height) / 2));
-        Inner.Width = Width - 2 - RightInset;
+        Inner.Location = new Point(_textInset, Math.Max(1, (Height - Inner.Height) / 2));
+        Inner.Width = Math.Max(8, Width - _textInset * 2 - RightInset);
     }
 
     protected override void OnEnabledChanged(EventArgs e)

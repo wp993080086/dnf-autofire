@@ -33,8 +33,8 @@ public class AppConfig
     public string PlaybackHotkey { get; set; } = "F10";  // 回放热键
     public string PlayMode { get; set; } = "infinite";   // 回放模式：count=回放 N 次 / infinite=一直放 / duration=定时 N 分钟
     public int PlayValue { get; set; } = 1;              // 回放次数或分钟数
-    public int PlayGapMs { get; set; } = 1000;           // 回放间隔：两轮之间的等待（毫秒，0=不等待）
-    public string Mode { get; set; } = "B";
+    public int PlayGapSec { get; set; } = 1;              // 回放间隔：两轮之间的等待（秒，0=不等待）
+    public string Mode { get; set; } = "B";              // 连发模式：A=保留原生（放行物理键，叠加连发）/ B=拦截原生（只发模拟）
 
     public static AppConfig Default() => new()
     {

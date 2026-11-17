@@ -23,7 +23,7 @@ public class MainForm : Form
     private const int RecRowH = 30;        // 录制方案列表行高
     private const int RecListHeight = 120; // 方案列表可视高度（正好 4 行，超出滚动，不留半行）
     // 录制页底部那行：空闲时是操作提示，录制/回放时被状态文案顶替
-    private const string RecordHint = "F9 开始/结束录制，F10 开始/停止回放；间隔＝两轮之间的等待，0 为不等待。";
+    private const string RecordHint = "录制时主窗口收进托盘，右下角留状态条。";
 
     // Tab 索引与标题：页面顺序 = Tab 顺序，加页只改这里与 BuildUi 的构建调用
     private const int TabKeys = 0;
@@ -1276,11 +1276,20 @@ public class MainForm : Form
         lblMode.Visible = !mouse;
         cboMode.Visible = !mouse && !record;
         cboPlayKey.Visible = record;
+
+        // 录制页没有第三行说明（热键用法已在页内），两行热键整体下移 8px 在卡片里上下居中
+        lblHotkey.Top = record ? 20 : 12;
+        cboStartKey.Top = record ? 16 : 8;
+        lblMode.Top = record ? 52 : 44;
+        cboMode.Top = record ? 48 : 40;
+        cboPlayKey.Top = record ? 48 : 40;
+
         lblModeTip.Text = record
-            ? "F9 录制、F10 回放，互不干扰；回放时主窗口收进托盘"
+            ? ""
             : mouse
                 ? "连点热键全局开关鼠标连点，与连发热键相互独立"
                 : "";
+        lblModeTip.Visible = !record;
         if (!record && !mouse) ApplyKeyModeTip(); // 按键页：说明跟着「保留原生 / 拦截原生」走
     }
 
@@ -1520,10 +1529,12 @@ public class MainForm : Form
         AddPageTitle(page, "鼠标录制回放",
             $"最多 {RecordStore.MaxProfiles} 个方案，单次录制上限 {MacroRecorder.MaxDurationMs / 60000} 分钟");
 
-        // 方案列表：行高 30，正好 4 行，超出滚动（最多 10 个方案）
+        // 方案列表：行高 30，正好 4 行，超出滚动（最多 10 个方案）。
+        // 行内控件在行顶下 1px，列表放到 41 才能让首行内容顶部落在 42——与按键页
+        // （列表 40 + 行内 2）完全一致，标题到内容的间距两页一样。
         pnlRecRows = new Panel
         {
-            Location = new Point(16, 38),
+            Location = new Point(16, 41),
             Size = new Size(RowWidth + 12, RecListHeight),
             BackColor = Color.White
         };
@@ -1557,8 +1568,8 @@ public class MainForm : Form
 
         // 录制/回放两个按钮在左下角的启动区里并排（见 BuildUi 的 pnlRun），页面内不再放按钮
 
-        // 回放行：模式 + 数值 + 单位 + 间隔
-        const int PlayRowY = 170;
+        // 回放行：模式 + 数值 + 单位 + 间隔（页面下半段，底部只留一行状态/提示）
+        const int PlayRowY = 190;
         lblPlay = new Label
         {
             Text = "回放",
@@ -1629,24 +1640,15 @@ public class MainForm : Form
         });
         ApplyPlayMode(); // 初始收口：默认"一直放"隐藏数值框
 
-        // 这一行空闲时是操作提示，录制/回放时变成状态（录制中… / 回放第几次）
+        // 页底只留一行：空闲时是操作提示，录制/回放时变成状态（录制中… / 回放第几次）
         lblRecStatus = new Label
         {
-            Location = new Point(16, 202),
-            AutoSize = true,
-            ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
-        };
-        var lblRecHint = new Label
-        {
-            Text = "录制时主窗口收进托盘，右下角留状态条。",
-            Location = new Point(16, 222),
+            Location = new Point(16, 226),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
         page.Controls.Add(lblRecStatus);
-        page.Controls.Add(lblRecHint);
     }
 
     /// <summary>回放模式收口：一直放＝隐藏数值框；其余按"次/分钟"给范围与单位。</summary>

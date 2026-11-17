@@ -682,7 +682,12 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 间隔范围挪到标题行 + 标题加大 | 「按键配置」字号 9.5 → 10.5，后面接 8pt 灰字「间隔范围 50-5000ms，步进 1」，位置用 `RowTextSize` 实测宽度顺排，避免不同 DPI 下压字 |
 | 按键间隔步进 1 → 50 | `KeyStepMs = 50`；范围文案由常量拼出（`间隔范围 50-5000ms，步进 50`）。手输仍允许 1ms 粒度，只有上下按钮/↑↓ 按 50 走 |
 | 鼠标页标题与按键页统一 | 抽 `AddPageTitle(page, 标题, 范围文案)`，两页共用 10.5pt 标题 + 8pt 灰字；鼠标页范围用 `MouseMinMs/MouseMaxMs/MouseStepMs` 拼出「100-10000ms，步进 100」；页底提示删掉间隔范围与「游戏内有效下限 40ms」 |
-| 配置版本字段 `ConfigVersion` | 值＝写盘时的程序版本（`Assembly.GetName().Version.ToString(3)`）。`Load` 里**缺字段或低于当前版本 → `AppConfig.Default()` + 立即 `Save` 覆写**；旧 `PlayGapMs` 一并清除。踩坑：字段不能给初始值，否则 STJ 反序列化缺失属性时保留默认值，永远判不出"没有这个字段" |
+| 配置版本字段 `ConfigVersion` | 值＝写盘时的程序版本（`Assembly.GetName().Version.ToString(3)`）。字段不给初始值，否则 STJ 反序列化缺失属性时保留默认值，永远判不出"没有这个字段"。**后续版本把它从「判定重置」改成「只作日志与升级依据」**（见下一行） |
+| 配置加载：整份重置 → 安全合并 | 以 `AppConfig.Default()` 序列化后的**形状**为骨架逐字段合并：文件里有且类型对得上 → 保留用户值；缺失 / 类型不符 → 用默认值；默认配置里没有的键（已废弃字段）不复制，回写时自然消失。合并后统一 `Sanitize`：间隔、次数、回放值按 `Limits` 钳制，热键非 F1–F12 回落默认，`Mode`/`PlayMode`/`StopMode` 归一，鼠标行固定按 L/R/M 对齐补齐，按键行最多 5 行 |
+| 合并的两个坑 | ① `JsonValueKind` 把 `true`/`false` 拆成 `True`、`False` 两个值，直接比 `GetValueKind()` 会把合法布尔值判成类型不符 → 加 `KindMatches` 专门放行布尔；② 默认值为 `null` 的字段（`ConfigVersion`）在骨架里是 `null`，需要单独走"沿用文件值"分支，否则每次加载都会把它丢掉并记一次"非法值回落" |
+| 旧字段 `PlayGapMs` → `PlayGapSec` | 合并前先跑 `MigrateLegacy`：文件里没有 `PlayGapSec` 但有 `PlayGapMs` 时换算成秒（`(ms+500)/1000`），日志留一条迁移记录 |
+| 自动点击次数框步进 | `Step` 1、默认 `1`、范围 `0–99999`（0 = 无限），数字框后补「次」单位；单位与次数框一起显隐（松手停止时都隐藏）。`Limits.MouseCountMax = 99999`，与按键连按（`Limits.KeyCountMax = 100000`）分开 |
+| 鼠标页底部说明拆三行 | 一个 `Label` 自动换行在窗口变窄时会折行数，改成三条独立 `Label`（y = 168 / 187 / 206，8pt 灰字）：松手停止 / 自动点击 / 滚轮＝滚轮按下（中键） |
 
 ---
 

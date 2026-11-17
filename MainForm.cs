@@ -7,14 +7,16 @@ public class MainForm : Form
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int HOTKEY_ID_RECORD = 3; // 录制热键
     private const int HOTKEY_ID_PLAY = 4;   // 回放热键
-    private const int MinMs = 50;
-    private const int MaxMs = 5000;
-    private const int KeyStepMs = 50;        // 按键间隔的步进值（上下按钮/↑↓每次走 50ms）
-    private const int MouseStepMs = 100;     // 鼠标连点间隔步进
-    private const int MouseMinMs = 100;      // 鼠标连点间隔下限
-    private const int MouseMaxMs = 10000;    // 鼠标连点间隔上限（10 秒）
-    private const int MouseDefaultMs = 300;  // 鼠标连点间隔默认值
-    private const int MaxKeyRepeat = 100000; // 自动连按 / 自动点击：次数上限（0 = 无限）
+    // 取值范围统一放在 Limits：配置加载时套用同一套上下限
+    private const int MinMs = Limits.MsMin;
+    private const int MaxMs = Limits.MsMax;
+    private const int KeyStepMs = Limits.MsStep;          // 按键间隔的步进值（上下按钮/↑↓每次走 50ms）
+    private const int MouseStepMs = Limits.MouseMsStep;   // 鼠标连点间隔步进
+    private const int MouseMinMs = Limits.MouseMsMin;     // 鼠标连点间隔下限
+    private const int MouseMaxMs = Limits.MouseMsMax;     // 鼠标连点间隔上限（10 秒）
+    private const int MouseDefaultMs = Limits.MouseMsDefault; // 鼠标连点间隔默认值
+    private const int MaxKeyRepeat = Limits.KeyCountMax;  // 自动连按次数上限（0 = 无限）
+    private const int MaxMouseRepeat = Limits.MouseCountMax; // 自动点击次数上限（0 = 无限）
     private const int RowH = 34;
     private const int RowWidth = 544;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
@@ -601,7 +603,7 @@ public class MainForm : Form
                 MouseButtonVk(r.Button),
                 NormalizeMouseMs(r.NumMs.Text),
                 r.SelStop.SelectedIndex == 1 ? MouseClickEngine.StopMode.Auto : MouseClickEngine.StopMode.Infinite,
-                NormalizeKeyRepeat(r.NumValue.Text)));
+                NormalizeMouseRepeat(r.NumValue.Text)));
         }
 
         // 空配置拦截：没有启用的行时不开引擎，直接引导用户去配置
@@ -861,7 +863,7 @@ public class MainForm : Form
                 Button = r.Button,
                 IntervalMs = NormalizeMouseMs(r.NumMs.Text),
                 StopMode = r.SelStop.SelectedIndex == 1 ? "auto" : "infinite",
-                StopValue = NormalizeKeyRepeat(r.NumValue.Text),
+                StopValue = NormalizeMouseRepeat(r.NumValue.Text),
                 Enabled = r.Chk.Checked
             }).ToList()
         };
@@ -1414,12 +1416,13 @@ public class MainForm : Form
             {
                 Location = new Point(x, 3),
                 Size = new Size(72, 28),
-                Step = 100,
+                Step = 1,
                 Min = 0,
-                Max = MaxKeyRepeat
+                Max = MaxMouseRepeat
             };
-            row.NumValue.Text = "0"; // 与按键页一致：0 = 无限
-            row.NumValue.Inner.MaxLength = 6;
+            row.NumValue.Text = "1"; // 自动点击默认点 1 次；0 = 无限
+            row.NumValue.Inner.MaxLength = 5;
+            row.LblCount = MakeRowText("次", x + 72 + 6); // 单位跟着次数框一起显隐
             ApplyMouseStopMode(row, "infinite", 0); // 初始即收口：默认松手停止时隐藏数值框（配置缺失时不会再漏显示）
 
             row.SelStop.SelectedIndexChanged += (_, _) =>
@@ -1453,22 +1456,31 @@ public class MainForm : Form
 
             panel.Controls.AddRange(new Control[]
             {
-                row.Chk, lblBtn, lblGap, row.NumMs, lblMs, row.SelStop, row.NumValue
+                row.Chk, lblBtn, lblGap, row.NumMs, lblMs, row.SelStop, row.NumValue, row.LblCount
             });
             page.Controls.Add(panel);
             _mouseRows.Add(row);
         }
 
-        var lblHint = new Label
+        // 三种触发方式各占一行，避免折行后行数随窗口宽度变化
+        const int hintX = 16, hintY = 168, hintLine = 19;
+        string[] hints =
         {
-            Text = "开启后按住对应鼠标键即自动连点，松开即停；滚轮＝滚轮按下（中键）。",
-            Location = new Point(16, 168),
-            AutoSize = true,
-            MaximumSize = new Size(RowWidth + 12, 0), // 超宽自动换行，不越过窗口右边缘
-            ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
+            "松手停止：按住对应鼠标键，自动连点，松手即停",
+            "自动点击：无需按下鼠标，设置好次数（0=无限次），自动点击 N 次",
+            "滚轮=滚轮按下（中键）"
         };
-        page.Controls.Add(lblHint);
+        for (int i = 0; i < hints.Length; i++)
+        {
+            page.Controls.Add(new Label
+            {
+                Text = hints[i],
+                Location = new Point(hintX, hintY + i * hintLine),
+                AutoSize = true,
+                ForeColor = AntStyle.TextTertiary,
+                Font = new Font(AntStyle.FontName, 8f)
+            });
+        }
     }
 
     /// <summary>录制页：方案列表（单选 + 行内改名 + 删除）+ 开始/停止录制。</summary>
@@ -2180,17 +2192,18 @@ public class MainForm : Form
         trayIcon.ShowBalloonTip(1800, "轨迹回放", "回放已结束。", ToolTipIcon.Info);
     }
 
-    /// <summary>按停止条件模式调整数值框：auto=自动点击(0 = 无限，1-100000)显示可编辑，infinite(松手停止)=隐藏。</summary>
+    /// <summary>按停止条件模式调整数值框：auto=自动点击（0 = 无限，1-99999）显示可编辑，infinite(松手停止)=隐藏。</summary>
     private void ApplyMouseStopMode(MouseRow r, string mode, int value)
     {
         bool infinite = mode != "auto";
         r.NumValue.Visible = !infinite;
+        r.LblCount.Visible = !infinite;
         r.NumValue.Enabled = !infinite && !_mouseEngine.Running; // 切回"自动点击"时必须恢复可编辑
         if (infinite) return;
         r.NumValue.Min = 0;
-        r.NumValue.Max = MaxKeyRepeat;
-        r.NumValue.Step = 100;
-        r.NumValue.SetValue(Math.Clamp(value, 0, MaxKeyRepeat));
+        r.NumValue.Max = MaxMouseRepeat;
+        r.NumValue.Step = 1;
+        r.NumValue.SetValue(Math.Clamp(value, 0, MaxMouseRepeat));
     }
 
     private void BuildTray()
@@ -2242,6 +2255,7 @@ public class MainForm : Form
         public AntNumber NumMs = null!;
         public AntSelect SelStop = null!;
         public AntNumber NumValue = null!;
+        public Label LblCount = null!; // 次数单位「次」，仅自动点击时显示
     }
 
     private void AddRow(string key, int ms, bool enabled, string stopMode = "hold", int stopValue = 0)
@@ -2358,10 +2372,15 @@ public class MainForm : Form
     }
 
     /// <summary>自动连按次数：0 = 无限，非法输入（空/负数）回落 0，上限 100000。</summary>
-    private static int NormalizeKeyRepeat(string text)
+    private static int NormalizeKeyRepeat(string text) => NormalizeCount(text, MaxKeyRepeat);
+
+    /// <summary>自动点击次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>
+    private static int NormalizeMouseRepeat(string text) => NormalizeCount(text, MaxMouseRepeat);
+
+    private static int NormalizeCount(string text, int max)
     {
         if (!int.TryParse(text?.Trim(), out int v) || v < 0) return 0;
-        return Math.Clamp(v, 0, MaxKeyRepeat);
+        return Math.Clamp(v, 0, max);
     }
 
     /// <summary>按顺序重排所有行 + 尾部"＋ 新增一行"，行距统一 RowH。</summary>

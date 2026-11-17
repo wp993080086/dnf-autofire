@@ -15,7 +15,7 @@
   - 启用开关（Checkbox）：勾选了就必须填键名，空键名或两行同键会拒绝开启并提示
 - **鼠标连点**（v1.1.0 新增，v1.2.0 补充滚轮与自动点击）：左键 / 右键 / 滚轮（滚轮按下，即中键）三行，各自独立配置
   - 每键独立设置间隔（毫秒，默认 300，步进 100，范围 100–10000）
-  - 停止条件：**松手停止**（默认，按住对应鼠标键才连点，松开即停）/ **自动点击**（开启后无需按住，`0` 表示一直点，可设 1–100000 次）
+  - 停止条件：**松手停止**（默认，按住对应鼠标键才连点，松开即停）/ **自动点击**（开启后无需按住，`0` 表示一直点，可设 1–99999 次，步进 1）
   - 触发时拦截原生点击、由引擎统一注入，避免重复点击（自动点击行不拦截物理点击）
 - **鼠标轨迹录制**（v1.2.0 新增）：`F9` 或录制页按钮开始/结束录制，主窗口自动收进托盘，屏幕右下角留一条可拖动的状态条（红点 + 计时 + ■ 停止）
   - 方案上限 10 个，列表内单选、行内改名、一键删除；单次录制上限 10 分钟，触顶自动停
@@ -97,9 +97,9 @@
     { "Key": "A", "IntervalMs": 100, "StopMode": "auto", "StopValue": 200, "Enabled": false }
   ],
   "MouseClicks": [
-    { "Button": "L", "IntervalMs": 300, "StopMode": "infinite", "StopValue": 0, "Enabled": false },
+    { "Button": "L", "IntervalMs": 300, "StopMode": "infinite", "StopValue": 1, "Enabled": false },
     { "Button": "R", "IntervalMs": 300, "StopMode": "auto", "StopValue": 50, "Enabled": true },
-    { "Button": "M", "IntervalMs": 100, "StopMode": "infinite", "StopValue": 0, "Enabled": false }
+    { "Button": "M", "IntervalMs": 100, "StopMode": "infinite", "StopValue": 1, "Enabled": false }
   ],
   "StartHotkey": "F6",
   "MouseStartHotkey": "F8",
@@ -117,9 +117,14 @@
 - `MouseClicks.StopMode`：`infinite`=松手停止（默认）/ `auto`=自动点击；`StopValue` 为自动点击的次数（`0` = 一直点，旧版 `count` 读入后按自动点击处理）
 - `PlayMode`：`count`=回放 N 次 / `infinite`=一直放 / `duration`=定时 N 分钟；`PlayValue` 为对应的次数或分钟数
 - `PlayGapSec`：两轮回放之间的等待秒数（`0` = 不等待，默认 `1`，上限 999999）
-- `ConfigVersion`：配置结构版本，等于写盘时的程序版本。**缺这个字段、或版本低于当前程序，整份配置直接重置为默认并立即覆写**（配置项不多，重填成本低于逐字段兼容）
+- `ConfigVersion`：配置结构版本，等于写盘时的程序版本。加载时**不做整份重置**，而是逐字段合并：
+  - 认识的字段、值也合法 → 原样保留
+  - 文件里缺的字段（新增项）→ 用默认值补上
+  - 已废弃的字段（如早先的 `PlayGapMs`）→ 丢弃，回写后从文件里消失；`PlayGapMs` 会先换算成秒写进 `PlayGapSec`
+  - 越界的值（如间隔 99999、热键写成 `F13`）→ 钳到允许范围或回落默认值
+  - 每次启动都会把合并结果写回文件，并把 `ConfigVersion` 更新为当前程序版本
 - 配置文件默认与 EXE 同目录；若 EXE 所在目录无写入权限，则使用 `%APPDATA%\DnfAutoFire\config.json`
-- 文件损坏时自动回退默认配置，并记录到 `error.log`
+- 文件完全无法解析时以默认配置运行（文件保留原样以便排查），并记录到 `error.log`；下次保存配置时覆盖
 
 ## 环境要求
 

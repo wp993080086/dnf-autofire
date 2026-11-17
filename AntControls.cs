@@ -140,6 +140,7 @@ internal sealed class AntButton : Control
     protected override void OnEnabledChanged(EventArgs e)
     {
         base.OnEnabledChanged(e);
+        Cursor = Enabled ? Cursors.Hand : Cursors.No; // 禁用控件收不到鼠标消息，窗体那边还有一层兜底
         Invalidate();
     }
 
@@ -225,7 +226,12 @@ internal sealed class AntCheckBox : Control
         base.OnMouseClick(e);
         if (Enabled && e.Button == MouseButtons.Left) Checked = !Checked;
     }
-    protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+    protected override void OnEnabledChanged(EventArgs e)
+    {
+        base.OnEnabledChanged(e);
+        Cursor = Enabled ? Cursors.Hand : Cursors.No;
+        Invalidate();
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -263,10 +269,54 @@ internal sealed class AntCheckBox : Control
 }
 
 /// <summary>
+/// 普通容器面板（灰底白底都行）。除铺底之外只管一件事：鼠标停在禁用子控件上时给「禁止」光标。
+/// 禁用控件收不到鼠标消息，系统会把 WM_SETCURSOR 交给它的父窗口，所以每个容器都要替它看一眼，
+/// 否则灰掉的按钮上仍是普通箭头，看不出点不了。
+/// </summary>
+internal class AntPanel : Panel
+{
+    private const int WM_SETCURSOR = 0x0020;
+    private const int HTCLIENT = 1;
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_SETCURSOR && ((long)m.LParam & 0xFFFF) == HTCLIENT && HasDisabledChildAt(this))
+        {
+            Cursor.Current = Cursors.No;
+            m.Result = (IntPtr)1;
+            return;
+        }
+        base.WndProc(ref m);
+    }
+
+    /// <summary>鼠标当前是否停在一个禁用控件上（含父链禁用，如整页锁定）。</summary>
+    internal static bool HasDisabledChildAt(Control root)
+    {
+        var hit = DeepestControlAt(root, root.PointToClient(Cursor.Position));
+        if (hit == null) return false;
+        for (Control? cur = hit; cur != null; cur = cur.Parent)
+        {
+            if (cur.Parent is AntSelect) continue; // 选择器的自绘覆盖层本身是禁用的，不代表不可用
+            if (!cur.Enabled) return true;
+        }
+        return false;
+    }
+
+    /// <summary>鼠标位置下最深的那个子控件（p 为 parent 的客户区坐标）。</summary>
+    private static Control? DeepestControlAt(Control parent, Point p)
+    {
+        // 只跳过不可见的：禁用的子控件也要算命中，否则「禁止」光标就补不上了
+        var child = parent.GetChildAtPoint(p, GetChildAtPointSkip.Invisible);
+        if (child == null) return null;
+        return DeepestControlAt(child, child.PointToClient(parent.PointToScreen(p))) ?? child;
+    }
+}
+
+/// <summary>
 /// AntD 输入框：白底 + #D9D9D9 圆角描边，聚焦变蓝并带浅蓝光晕。
 /// 内部是无边框 TextBox，通过 Inner 访问。
 /// </summary>
-internal class AntInput : Panel
+internal class AntInput : AntPanel
 {
     public readonly TextBox Inner = new() { BorderStyle = BorderStyle.None };
     private bool _focused;
@@ -433,18 +483,33 @@ internal sealed class AntNumber : AntInput
 /// 右侧用自绘箭头覆盖层（点击展开下拉）；下拉项自绘（AntD 高亮样式）。
 /// 外层自绘 AntD 圆角描边，悬停变蓝。
 /// </summary>
-internal sealed class AntSelect : Panel
+internal sealed class AntSelect : AntPanel
 {
     public readonly ComboBox Inner;
     private readonly Control _face;   // 覆盖层：自绘 AntD 外观；禁用状态鼠标穿透到下层 Combo
+    // 被别处占用的选项（热键互斥）：列表里置灰，宿主在选中变化时兜底回退
+    private readonly HashSet<string> _blocked = new(StringComparer.OrdinalIgnoreCase);
     private bool _hover;
     private bool _dropped;
+
+    /// <summary>标记一批不可选的选项（按文本匹配，忽略大小写）；传空即全部解禁。</summary>
+    public void SetBlockedItems(IEnumerable<string> items)
+    {
+        _blocked.Clear();
+        foreach (var s in items)
+            if (!string.IsNullOrWhiteSpace(s)) _blocked.Add(s.Trim());
+        _face.Invalidate();
+    }
+
+    /// <summary>该选项当前是否不可选（置灰显示）。</summary>
+    public bool IsBlocked(string? text) => _blocked.Contains((text ?? "").Trim());
 
     public AntSelect()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         BackColor = Color.White;
+        Cursor = Cursors.Hand; // 可下拉：悬停给手型（禁用时由 AntPanel 统一换成「禁止」）
 
         // 覆盖层先创建（事件回调中引用它）
         _face = new Control { Enabled = false };
@@ -458,6 +523,7 @@ internal sealed class AntSelect : Panel
             DrawMode = DrawMode.OwnerDrawFixed,
             ItemHeight = 20
         };
+        Inner.Cursor = Cursors.Hand; // 可下拉的选择器：悬停给手型
         Inner.DrawItem += Inner_DrawItem;                            // 下拉弹出的列表项自绘
         Inner.SelectedIndexChanged += (_, _) =>
         {
@@ -489,7 +555,8 @@ internal sealed class AntSelect : Panel
     private void Inner_DrawItem(object? sender, DrawItemEventArgs e)
     {
         if (e.Index < 0 || e.Index >= Inner.Items.Count) return;
-        bool disabled = (e.State & DrawItemState.Disabled) != 0;
+        string item = Inner.Items[e.Index]!.ToString() ?? "";
+        bool disabled = (e.State & DrawItemState.Disabled) != 0 || IsBlocked(item);
         bool selected = (e.State & DrawItemState.Selected) != 0;
         using var bg = new SolidBrush(disabled ? AntStyle.BgLayout : selected ? AntStyle.PrimaryBg : Color.White);
         e.Graphics.FillRectangle(bg, e.Bounds);
@@ -580,6 +647,7 @@ internal sealed class FlatScrollBar : Control
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Width = 8;
         BackColor = Color.White;
+        Cursor = Cursors.Hand; // 可拖动/点轨道
         TabStop = false;
     }
 

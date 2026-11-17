@@ -85,6 +85,29 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --cursortest 光标移到几个控件上，回报「禁用=禁止 / 可点=手型」
+        if (args.Length >= 2 && args[1] == "--cursortest")
+        {
+            var csForm = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(260, 200), TopMost = true };
+            csForm.Show();
+            Application.DoEvents();
+            Thread.Sleep(300);
+            csForm.DebugCursorProbe();
+            csForm.Close();
+            return;
+        }
+
+        // 调试用：dnf-autofire --hotkeytest 核对热键互斥（置灰 + 硬选时回退）
+        if (args.Length >= 2 && args[1] == "--hotkeytest")
+        {
+            using var hkForm = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(-3000, -3000) };
+            hkForm.Show();
+            Application.DoEvents();
+            hkForm.DebugHotkeyTest();
+            hkForm.Close();
+            return;
+        }
+
         // 调试用：dnf-autofire --mouselayout 打印鼠标页行内控件边界
         if (args.Length >= 2 && args[1] == "--mouselayout")
         {

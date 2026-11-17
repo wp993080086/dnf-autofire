@@ -688,14 +688,16 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 旧字段 `PlayGapMs` → `PlayGapSec` | 合并前先跑 `MigrateLegacy`：文件里没有 `PlayGapSec` 但有 `PlayGapMs` 时换算成秒（`(ms+500)/1000`），日志留一条迁移记录 |
 | 自动点击次数框步进 | `Step` 1、默认 `1`、范围 `0–99999`（0 = 无限），数字框后补「次」单位；单位与次数框一起显隐（松手停止时都隐藏）。`Limits.MouseCountMax = 99999`，与按键连按（`Limits.KeyCountMax = 100000`）分开 |
 | 按键次数框与鼠标页对齐 | 按键行 `NumCount` 改成 `Step=1`、`Max=99999`（`Limits.KeyCountMax` 同步 100000 → 99999），框后加「次」`Label`（`RowControls.LblCount`），`ApplyKeyStopMode` 里与数值框一起显隐。行内控件按实测宽度顺排，间距统一 8px，控件沿用原尺寸（`TxtKey` 56 / `TxtMs` 84 / `SelStop` 96 / `NumCount` 72）；「次」紧跟次数框（x=512），`LnkDel` 不固定、跟着内容尾巴走：`ApplyKeyStopMode` 里 `Left = auto ? LblCount.Right + 6 : SelStop.Right + 8`（切停止条件时一起挪），两者互不重叠。最宽情形（auto + 删除）到 582，故整行需要 584 宽，装不进原来的 544，于是窗口 600 → 640、页面 596 → 636、`RowWidth` 544 → 584（高度不变） |
-| 录制页两个按钮并排 | 两个按钮放进左下角启动区 `pnlRun`（不另起一行）：`RunBtnW = (366 - 16) / 2 = 175`，`btnRecord` 在 (14,6)、`btnPlay` 在 (205,6)，与 `btnMain` 同一块 366×40 区域。`RefreshRunCard` 按 Tab 切换 `Visible`：录制页显示这两枚、隐藏 `btnMain`；其它页反之。按钮文案/可用性收进 `SyncRecordButtons()`，`UpdateRecordUi` 与切页都会调 |
-| 底部分隔线右移 100 | 设置卡内容少、左侧启动区空：竖分隔线 296 → 396，`pnlRun` 294 → 394、`pnlSet` 340 → 240（x 298 → 398），`btnMain` 244 → 366。设置卡内标签仍在 14、下拉仍在 86（宽 120），右侧余量 34，最长的那句「拦截原生：拦下物理按键，只发模拟连发」约 209 宽仍完整显示 |
+| 录制页两个按钮并排 | 两个按钮放进左下角启动区 `pnlRun`（不另起一行）：`RunBtnW = (366 - 16) / 2 = 175`，`btnRecord` 在 (14,6)、`btnPlay` 在 (205,6)，与 `btnMain` 同一块 366×40 区域。`RefreshRunCard` 按 Tab 切换 `Visible`：录制页显示这两枚、隐藏 `btnMain`；其它页反之。按钮文案/可用性收进 `SyncRecordButtons()`，`UpdateRecordUi` 与切页都会调 |
+| 底部分隔线右移 100 | 设置卡内容少、左侧启动区空：竖分隔线 296 → 396，`pnlRun` 294 → 394、`pnlSet` 340 → 240（x 298 → 398），`btnMain` 244 → 366。设置卡内标签仍在 14、下拉仍在 86（宽 120），右侧余量 34，最长的那句「拦截原生：拦下物理按键，只发模拟连发」约 209 宽仍完整显示 |
+| 热键互斥 | 四个槽位（连发/连点/录制/回放）互相排他：`AntSelect.SetBlockedItems` 把「别的槽位在用」的键标灰，`Inner_DrawItem` 里按 `IsBlocked` 画成禁用色；选中变化时 `RevertHotkeyIfTaken` 兜底——命中就提示并 `sel.Text = 原值`（`_hotkeySyncing` 防重入），方向键/旧配置这种绕过置灰的路径也拦得住。置灰集合在 `SyncHotkeyUI` 里按 Tab 重算 |
+| 光标统一 | 禁用控件收不到鼠标消息，系统把 WM_SETCURSOR 交给父窗口 → 容器统一换成 `AntPanel`（`AntInput`/`AntSelect` 也继承它），WndProc 里用 `HasDisabledChildAt` 判断「鼠标下最深控件是否禁用（含父链）」并 `Cursor.Current = Cursors.No`；选择器的自绘覆盖层本身禁用（为了让点击穿透），判断时跳过它。可点的补齐手型：`AntButton`/`AntCheckBox`（启停切换）、`AntSelect`、`FlatScrollBar` |
 | 鼠标页去掉热键说明 | 录制页与鼠标页都不再显示 `lblModeTip`（`Visible = !record && !mouse`，只在按键页显示并跟随「保留原生 / 拦截原生」）；鼠标页卡片只剩一行，`lblHotkey.Top = 36` / `cboStartKey.Top = 32` 在 92 高的卡片里居中（录制页两行为 20/52、16/48）|
 | 录制页标题统一 | 改用 `AddPageTitle(page, "鼠标录制回放", "最多 10 个方案，单次录制上限 10 分钟")`；列表容器放到 y=41（行内控件在行顶下 1px，首行内容顶部 42，与按键页「列表 40 + 行内 2」一致）；回放设置行 y=190，页底只留一行状态/提示 y=226 |
 | 录制页状态行复用 | `lblRecStatus` 挪到 y=226 当「状态/提示」两用：空闲显示 `RecordHint`（8pt 灰，内容缩到只剩「录制时主窗口收进托盘，右下角留状态条。」），录制中红字「● 录制中…」，回放中由 `PlayTimer_Tick` 写进度（蓝字）；原来 y=222 那条固定提示 `lblRecHint` 删掉，与空闲提示合并成一行。「共 N 个方案」「已选：方案X · 时长」文案与 `lblPlayInfo` / `DescribeSelection` 一并删除 |
 | 方案行改名框与时长 | 名称框固定 `200×28`（`MaxLength=15`），时长文字 `RecordProfile.Summary` 改为「总时长 12.4s」放在 x=234，删除按钮位置 = `234 + RowTextWidth(Summary) + 12`，紧跟时长不再拉到行尾 |
-| 鼠标页底部说明拆三行 | 一个 `Label` 自动换行在窗口变窄时会折行数，改成三条独立 `Label`（y = 168 / 187 / 206，8pt 灰字）：松手停止 / 自动点击 / 滚轮＝滚轮按下（中键） |
-| 录制页去掉热键/间隔说明 | 设置卡里录制页不再显示 `lblModeTip`（`Visible = !record`，那句话是「F9 录制、F10 回放，互不干扰；回放时主窗口收进托盘」），两行热键在卡片里整体下移 8px 居中（标签 12/44 → 20/52，下拉 8/40 → 16/48）；页底 `RecordHint` 从「F9 开始/结束录制，F10 开始/停止回放；间隔＝两轮之间的等待，0 为不等待。」换成只讲托盘的一句，`lblRecHint` 删除，回放设置行 170 → 190、状态行 → 226 |
+| 鼠标页底部说明拆三行 | 一个 `Label` 自动换行在窗口变窄时会折行数，改成三条独立 `Label`（y = 168 / 187 / 206，8pt 灰字）：松手停止 / 自动点击 / 滚轮＝滚轮按下（中键） |
+| 录制页去掉热键/间隔说明 | 设置卡里录制页不再显示 `lblModeTip`（`Visible = !record`，那句话是「F9 录制、F10 回放，互不干扰；回放时主窗口收进托盘」），两行热键在卡片里整体下移 8px 居中（标签 12/44 → 20/52，下拉 8/40 → 16/48）；页底 `RecordHint` 从「F9 开始/结束录制，F10 开始/停止回放；间隔＝两轮之间的等待，0 为不等待。」换成只讲托盘的一句，`lblRecHint` 删除，回放设置行 170 → 190、状态行 → 226 |
 | 录制页标题间距对齐按键页 | 录制列表容器 38 → 41：行内控件在行顶下 1px，`41 + 1 = 42`，与按键页 `列表 40 + 行内控件 2 = 42` 完全一致（两页标题都在 y=11） |
 
 ---

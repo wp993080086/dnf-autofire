@@ -7,6 +7,8 @@ public class MainForm : Form
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int HOTKEY_ID_RECORD = 3; // 录制热键
     private const int HOTKEY_ID_PLAY = 4;   // 回放热键
+    private const int WM_SETCURSOR = 0x0020; // 光标形状：禁用控件收不到鼠标消息，靠窗体补「禁止」光标
+    private const int HTCLIENT = 1;
     // 取值范围统一放在 Limits：配置加载时套用同一套上下限
     private const int MinMs = Limits.MsMin;
     private const int MaxMs = Limits.MsMax;
@@ -246,6 +248,121 @@ public class MainForm : Form
 
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
+
+    /// <summary>
+    /// 调试入口：--hotkeytest 核对热键互斥：别的槽位在用的键是否置灰、
+    /// 硬选到那个键是否被退回（方向键/程序设值这条兜底路径）。
+    /// </summary>
+    internal void DebugHotkeyTest()
+    {
+        DebugShowTab(TabRecord);
+        Application.DoEvents();
+
+        void Dump(string name, AntSelect sel)
+        {
+            var blocked = sel.Inner.Items.Cast<object>()
+                .Select(o => o?.ToString() ?? "")
+                .Where(sel.IsBlocked);
+            Console.WriteLine($"[hotkeytest] {name}：当前={sel.Text} 置灰=[{string.Join(",", blocked)}]");
+        }
+
+        Console.WriteLine($"[hotkeytest] 配置：连发={_config.StartHotkey} 连点={_config.MouseStartHotkey} "
+            + $"录制={_config.RecordHotkey} 回放={_config.PlaybackHotkey}");
+        Dump("录制热键", cboStartKey);
+        Dump("回放热键", cboPlayKey);
+
+        string TrySelect(AntSelect sel, string key)
+        {
+            int idx = sel.Inner.Items.IndexOf(key);
+            if (idx < 0) return "无此选项";
+            sel.SelectedIndex = idx;
+            Application.DoEvents();
+            return sel.Text;
+        }
+
+        string before = cboStartKey.Text;
+        Console.WriteLine($"[hotkeytest] 硬选「连发热键」在用的 {_config.StartHotkey} → 结果={TrySelect(cboStartKey, _config.StartHotkey)}（应退回 {before}）");
+        Console.WriteLine($"[hotkeytest] 选空闲键 F5 → 结果={TrySelect(cboStartKey, "F5")}（应为 F5，且此时回放热键的 F5 应置灰）");
+        Dump("回放热键(选完 F5)", cboPlayKey);
+        Console.WriteLine($"[hotkeytest] 选回 {before} → 结果={TrySelect(cboStartKey, before)}");
+        Dump("录制热键(复位)", cboStartKey);
+    }
+
+    /// <summary>
+    /// 调试入口：--cursortest 把光标依次停在各个控件上，回报光标形状：
+    /// 可点的按钮/选择器/复选框=手型，输入框=I 型，禁用的一律=禁止，纯文字=箭头。
+    /// </summary>
+    internal void DebugCursorProbe()
+    {
+        Activate();
+        BringToFront();
+        Application.DoEvents();
+        var old = Cursor.Position;
+
+        string Probe(Control c, string name, bool disable = false)
+        {
+            if (!c.Visible)
+                return $"{name}: 不可见，跳过";
+            bool was = c.Enabled;
+            if (disable) c.Enabled = false;
+            Application.DoEvents();
+            var p = c.PointToScreen(new Point(Math.Min(c.Width / 2, 20), c.Height / 2));
+            Cursor.Position = p;
+            for (int i = 0; i < 6; i++) { Application.DoEvents(); Thread.Sleep(20); }
+            var h = (Cursor.Current ?? Cursors.Default).Handle;
+            string cur = h == Cursors.No.Handle ? "No"
+                : h == Cursors.Hand.Handle ? "Hand"
+                : h == Cursors.IBeam.Handle ? "IBeam"
+                : "Default";
+            c.Enabled = was;
+            Application.DoEvents();
+            return $"{name}{(disable ? "(禁用)" : "")}: → {cur}";
+        }
+
+        DebugShowTab(TabKeys);
+        Application.DoEvents();
+        Console.WriteLine("[cursortest] —— 按键页");
+        foreach (var line in new[]
+        {
+            Probe(btnMain, "主按钮(开启连发)"),
+            Probe(_rows[0].Chk, "启用复选框"),
+            Probe(_rows[0].TxtKey, "键名输入框"),
+            Probe(_rows[0].TxtMs, "间隔数字框(文本区)"),
+            Probe(_rows[0].SelStop, "停止条件下拉"),
+            Probe(btnAdd, "新增一行"),
+            Probe(btnMain, "主按钮", disable: true),
+            Probe(_rows[0].TxtKey, "键名输入框", disable: true),
+            Probe(_rows[0].SelStop, "停止条件下拉", disable: true)
+        })
+            Console.WriteLine("[cursortest] " + line);
+
+        // 补满 5 行：第 3 行起才有「删除」，到上限「新增一行」会置灰
+        while (_rows.Count < MaxRows) DebugAddEmptyRow();
+        Application.DoEvents();
+        foreach (var line in new[]
+        {
+            Probe(_rows[2].LnkDel, "删除按钮(第3行)"),
+            Probe(_rows[2].LnkDel, "删除按钮(第3行)", disable: true),
+            Probe(btnAdd, "新增一行(已到上限)")
+        })
+            Console.WriteLine("[cursortest] " + line);
+
+        DebugShowTab(TabRecord);
+        Application.DoEvents();
+        Console.WriteLine("[cursortest] —— 录制页");
+        foreach (var line in new[]
+        {
+            Probe(btnPlay, "开始回放(未选方案)"),
+            Probe(btnRecord, "开始录制"),
+            Probe(cboStartKey, "录制热键下拉"),
+            Probe(cboPlayMode, "回放模式下拉", disable: true),
+            Probe(numPlayGap, "间隔数字框", disable: true),
+            Probe(lblRecStatus, "提示文字")
+        })
+            Console.WriteLine("[cursortest] " + line);
+
+        Cursor.Position = old;
+    }
 
     /// <summary>
     /// 调试入口：--seltest 模拟「点第二个方案」，等价于用户在列表里切换选中项。
@@ -818,6 +935,15 @@ public class MainForm : Form
             return;
         }
 
+        // 禁用控件收不到鼠标消息，系统把光标交回窗体：这里补「禁止」光标，
+        // 否则鼠标停在灰掉的按钮上还是普通箭头，看不出不能点（各容器 AntPanel 里也各看一眼）
+        if (m.Msg == WM_SETCURSOR && ((long)m.LParam & 0xFFFF) == HTCLIENT && AntPanel.HasDisabledChildAt(this))
+        {
+            Cursor.Current = Cursors.No;
+            m.Result = (IntPtr)1;
+            return;
+        }
+
         base.WndProc(ref m);
         if (m.Msg == WM_HOTKEY)
         {
@@ -1005,7 +1131,7 @@ public class MainForm : Form
     private void BuildUi()
     {
         // 主区域（Tab + 配置页）：三个区域（主区/启动区/设置区）以 2px 深色边框分隔，无留白卡片
-        var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(636, 302), BackColor = Color.White };
+        var pnlMain = new AntPanel { Location = new Point(2, 2), Size = new Size(636, 302), BackColor = Color.White };
 
         // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
         tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(636, 44), BackColor = Color.White, TabStop = true, TabIndex = 0 };
@@ -1031,7 +1157,7 @@ public class MainForm : Form
         // 页面容器：各页面叠放在同一位置，只显示当前 Tab 对应的那一页
         for (int i = 0; i < _pages.Length; i++)
         {
-            _pages[i] = new Panel
+            _pages[i] = new AntPanel
             {
                 Location = new Point(0, 44),
                 Size = new Size(636, 258),
@@ -1051,7 +1177,7 @@ public class MainForm : Form
 
         // 启动区（左下）：按键/鼠标页是一个主按钮；录制页换成「开始录制 / 开始回放」两个等宽按钮。
         // 设置区（右下）内容不多，分隔线右移 100px：启动区 394、设置区 240，按钮能铺开、右侧也不空
-        var pnlRun = new Panel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.White };
+        var pnlRun = new AntPanel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.White };
         const int RunBtnW = 175;              // (366 - 间距 16) / 2，两个按钮均分同一块宽度
         const int RunBtnGap = 16;
         btnMain = new AntButton
@@ -1107,7 +1233,7 @@ public class MainForm : Form
         // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效。
         // 分隔线右移后只剩 240 宽：标签 14 起、下拉 86 起 120 宽，右侧仍留 34 的余量给说明文字
-        var pnlSet = new Panel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.White };
+        var pnlSet = new AntPanel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.White };
         lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
         lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
@@ -1126,8 +1252,10 @@ public class MainForm : Form
         cboStartKey.SelectedIndexChanged += (_, _) =>
         {
             if (_loading || _hotkeySyncing) return;
+            if (RevertHotkeyIfTaken(cboStartKey, StartKeySlot())) return;
             SaveConfig();
             RegisterHotkeys();
+            RefreshHotkeyAvailability(); // 值变了，另一页的置灰跟着变
         };
         cboMode.SelectedIndexChanged += (_, _) =>
         {
@@ -1138,8 +1266,10 @@ public class MainForm : Form
         cboPlayKey.SelectedIndexChanged += (_, _) =>
         {
             if (_loading || _hotkeySyncing) return;
+            if (RevertHotkeyIfTaken(cboPlayKey, "回放热键")) return;
             SaveConfig();
             RegisterHotkeys();
+            RefreshHotkeyAvailability();
         };
 
         // 模式说明（跟着下拉框当前选项变）
@@ -1294,6 +1424,64 @@ public class MainForm : Form
         lblModeTip.Visible = !record && !mouse;
         lblModeTip.Text = "";
         if (!record && !mouse) ApplyKeyModeTip(); // 按键页：说明跟着「保留原生 / 拦截原生」走
+
+        RefreshHotkeyAvailability(); // 同一个热键不能配给两个功能：别的槽位用着的键在列表里置灰
+    }
+
+    /// <summary>四个热键槽位：界面标签名 + 当前生效值（界面上按 Tab 只显示其中一到两个）。</summary>
+    private (string Name, string Key)[] HotkeySlots() => new[]
+    {
+        ("连发热键", _config.StartHotkey),
+        ("连点热键", _config.MouseStartHotkey),
+        ("录制热键", _config.RecordHotkey),
+        ("回放热键", _config.PlaybackHotkey)
+    };
+
+    /// <summary>「连发/连点/录制」那个热键下拉框当前对应哪个槽位（跟着 Tab 走）。</summary>
+    private string StartKeySlot() => _tabIndex == TabRecord ? "录制热键" : _tabIndex == TabMouse ? "连点热键" : "连发热键";
+
+    private string HotkeyOf(string slot) => slot switch
+    {
+        "连点热键" => _config.MouseStartHotkey,
+        "录制热键" => _config.RecordHotkey,
+        "回放热键" => _config.PlaybackHotkey,
+        _ => _config.StartHotkey
+    };
+
+    /// <summary>把「别的槽位已经在用」的键在本页的下拉框里置灰，排掉大半误选。</summary>
+    private void RefreshHotkeyAvailability()
+    {
+        if (cboStartKey == null || cboPlayKey == null) return;
+        BlockOtherSlots(cboStartKey, StartKeySlot());
+        BlockOtherSlots(cboPlayKey, "回放热键");
+    }
+
+    private void BlockOtherSlots(AntSelect sel, string ownSlot)
+    {
+        var slots = HotkeySlots();
+        sel.SetBlockedItems(slots.Where(s => s.Name != ownSlot).Select(s => s.Key));
+    }
+
+    /// <summary>
+    /// 选到别的槽位已经在用的键：提示并退回原值。
+    /// 列表里虽然已经置灰，但方向键、滚轮滚动、程序设值都能绕过置灰，这里兜住。
+    /// </summary>
+    private bool RevertHotkeyIfTaken(AntSelect sel, string slot)
+    {
+        string picked = (sel.Text ?? "").Trim();
+        string mine = HotkeyOf(slot);
+        if (picked.Length == 0 || string.Equals(picked, mine, StringComparison.OrdinalIgnoreCase)) return false;
+
+        foreach (var (name, key) in HotkeySlots())
+        {
+            if (name == slot || !string.Equals((key ?? "").Trim(), picked, StringComparison.OrdinalIgnoreCase)) continue;
+            _hotkeySyncing = true;
+            sel.Text = mine;
+            _hotkeySyncing = false;
+            UpdateStatus($"提示：{picked} 已被「{name}」占用，无法选择，已退回 {mine}");
+            return true;
+        }
+        return false;
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)
@@ -1380,7 +1568,7 @@ public class MainForm : Form
     {
         AddPageTitle(page, "按键配置", $"间隔范围 {MinMs}-{MaxMs}ms，步进 {KeyStepMs}");
 
-        pnlRows = new Panel
+        pnlRows = new AntPanel
         {
             Location = new Point(16, 40),
             Size = new Size(RowWidth + 12, 210),
@@ -1394,7 +1582,7 @@ public class MainForm : Form
         };
         scrollBar.OffsetChanged += off => pnlContent.Top = -off;
 
-        pnlContent = new Panel
+        pnlContent = new AntPanel
         {
             Location = new Point(0, 0),
             Size = new Size(RowWidth, RowH),
@@ -1421,7 +1609,7 @@ public class MainForm : Form
         foreach (var (button, label, y) in new[] { ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120) })
         {
             var row = new MouseRow { Button = button };
-            var panel = new Panel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.White };
+            var panel = new AntPanel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.White };
             row.RowPanel = panel;
 
             row.Chk = new AntCheckBox
@@ -1535,7 +1723,7 @@ public class MainForm : Form
         // 方案列表：行高 30，正好 4 行，超出滚动（最多 10 个方案）。
         // 行内控件在行顶下 1px，列表放到 41 才能让首行内容顶部落在 42——与按键页
         // （列表 40 + 行内 2）完全一致，标题到内容的间距两页一样。
-        pnlRecRows = new Panel
+        pnlRecRows = new AntPanel
         {
             Location = new Point(16, 41),
             Size = new Size(RowWidth + 12, RecListHeight),
@@ -1548,7 +1736,7 @@ public class MainForm : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
         recScroll.OffsetChanged += off => pnlRecContent.Top = -off;
-        pnlRecContent = new Panel
+        pnlRecContent = new AntPanel
         {
             Location = new Point(0, 0),
             Size = new Size(RowWidth, RecListHeight),
@@ -1695,7 +1883,7 @@ public class MainForm : Form
         for (int i = 0; i < _profiles.Count; i++)
         {
             var profile = _profiles[i];
-            var row = new Panel
+            var row = new AntPanel
             {
                 Location = new Point(0, i * RecRowH),
                 Size = new Size(RowWidth, RecRowH),
@@ -2283,7 +2471,7 @@ public class MainForm : Form
     private void AddRow(string key, int ms, bool enabled, string stopMode = "hold", int stopValue = 0)
     {
         var row = new RowControls();
-        var panel = new Panel { Size = new Size(RowWidth, RowH), BackColor = Color.White };
+        var panel = new AntPanel { Size = new Size(RowWidth, RowH), BackColor = Color.White };
         row.RowPanel = panel;
 
         row.Chk = new AntCheckBox

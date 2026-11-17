@@ -28,7 +28,20 @@ internal static partial class Program
         if (args.Length >= 3 && args[1] == "--playoverlaytest") { RunPlayOverlayTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--closetest") { RunCloseTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--xclosetest") { RunXCloseTest(args); return true; }
+        if (args.Length >= 3 && args[1] == "--savetest") { RunSaveTest(args); return true; }
         return false;
+    }
+
+    // 调试用：dnf-autofire --savetest <最终间隔秒> [等待毫秒]
+    // 连改 5 次值 → 立刻读文件（应仍是旧值）→ 等防抖到期再读（应已更新）→ 设最终值后立即关窗（验证退出兜底）
+    private static void RunSaveTest(string[] args)
+    {
+        var form = new MainForm();
+        form.Show();
+        Application.DoEvents();
+        form.DebugSaveTest(int.TryParse(args[2], out int v) ? v : 7,
+                           args.Length >= 4 && int.TryParse(args[3], out int w) ? w : 700);
+        Application.Run(form);
     }
 
     // 调试用：dnf-autofire --screenshot <path.png> [新增行数] 离屏渲染窗口后退出

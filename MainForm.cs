@@ -43,6 +43,12 @@ public partial class MainForm : Form
     private bool _exiting;
     private readonly WheelFilter _wheelFilter;
 
+    // 配置落盘防抖：点箭头/连续勾选会连着触发保存，静默 400ms 后只写一次盘。
+    // 注意 _config 是立刻更新的，只有「写文件」这一步被推迟。
+    private const int SaveDebounceMs = 400;
+    private readonly System.Windows.Forms.Timer _saveTimer;
+    private AppConfig? _pendingSave;   // 已生效但还没写进 config.json 的配置
+
     // 自定义 Tab
     private int _tabIndex;
     private int _tabHover = -1;
@@ -141,6 +147,9 @@ public partial class MainForm : Form
         // 回放进度：200ms 刷新「第 N 次 · mm:ss」，同时驱动右下角状态条
         _playTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _playTimer.Tick += PlayTimer_Tick;
+        // 配置写盘防抖
+        _saveTimer = new System.Windows.Forms.Timer { Interval = SaveDebounceMs };
+        _saveTimer.Tick += (_, _) => FlushConfig();
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
         _fontBold = new Font(Font, FontStyle.Bold);
         for (int i = 0; i < TabTitles.Length; i++)
@@ -256,6 +265,7 @@ public partial class MainForm : Form
     {
         // 用户点 X 已在 WndProc 的 SC_CLOSE 分支里拦下并问过一遍；
         // 走到这里的是程序自身关窗（退出流程）或系统关机，直接放行。
+        FlushConfig();   // 兜底：防抖窗口内退出也不会丢掉最后的改动
         base.OnFormClosing(e);
     }
 
@@ -385,14 +395,30 @@ public partial class MainForm : Form
                 Enabled = r.Chk.Checked
             }).ToList()
         };
+
+        // 内存里立刻生效：热键校验、引擎启动参数都读 _config，不能等写盘；
+        // 写文件推迟到静默 400ms 后，连续调值时只落一次盘
+        _config = cfg;
+        _pendingSave = cfg;
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>把挂起的配置真正写进 config.json（防抖到期、窗体关闭时调用）。</summary>
+    private void FlushConfig()
+    {
+        _saveTimer.Stop();
+        var cfg = _pendingSave;
+        if (cfg == null) return;
         try
         {
             ConfigManager.Save(cfg);
-            _config = cfg;
+            _pendingSave = null;
             UpdateStatus("配置已保存到 config.json");
         }
         catch (Exception ex)
         {
+            // 保留 _pendingSave，下次改动或关闭时再试一次
             Logger.Error("SaveConfig", ex);
             MessageBox.Show("保存失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }

@@ -421,5 +421,44 @@ public partial class MainForm : Form
 
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
+
+    /// <summary>
+    /// 调试入口：验证配置防抖。
+    /// 连改 5 次值后立刻读文件（应仍是旧值，说明没立即写盘），等防抖到期再读（应已更新），
+    /// 最后设成 finalGap 并立刻关窗，验证退出兜底没丢最后一次改动。
+    /// </summary>
+    internal void DebugSaveTest(int finalGap, int waitMs)
+    {
+        DebugShowTab(TabRecord);
+        string CfgPath() => System.IO.Path.Combine(AppPaths.DataDir, "config.json");
+        string? ReadGap()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(CfgPath())) return "(无文件)";
+                var node = System.Text.Json.Nodes.JsonNode.Parse(System.IO.File.ReadAllText(CfgPath()));
+                return node?["PlayGapSec"]?.ToString() ?? "(无字段)";
+            }
+            catch (Exception ex) { return "(读失败:" + ex.GetType().Name + ")"; }
+        }
+
+        Logger.Info($"[savetest] 起始文件值={ReadGap()}");
+        for (int i = 1; i <= 5; i++) numPlayGap.SetValue(i);
+        Application.DoEvents();
+        Logger.Info($"[savetest] 连改 5 次后（应仍是旧值）文件值={ReadGap()} 挂起={_pendingSave != null}");
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < waitMs)
+        {
+            Application.DoEvents();
+            Thread.Sleep(10);
+        }
+        Logger.Info($"[savetest] 等待 {waitMs}ms 后（防抖应已落盘）文件值={ReadGap()} 挂起={_pendingSave != null}");
+
+        numPlayGap.SetValue(finalGap);
+        Logger.Info($"[savetest] 设为 {finalGap} 后立即关窗，挂起={_pendingSave != null}");
+        // 交给消息循环关窗：确保 OnFormClosing 的兜底落盘真的跑到
+        BeginInvoke(new Action(Close));
+    }
 }
 #endif

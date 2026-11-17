@@ -154,6 +154,7 @@ dotnet publish -c Release -r win-x64 ^
 | `--recordtest <秒> <png>` | 自动开始录制、抓一张悬浮条截图、到时停止并退出（验证录制链路） |
 | `--playtest <方案名> <值> [count\|infinite\|duration] [最长秒数] [png]` | 按指定模式开启回放，跑完/到点即退出（配 `DNF_DRYRUN=1` 只跑时间轴、不注入鼠标；给 `png` 则 3 秒后抓一张回放状态条） |
 | `--playoverlaytest <png> [第几次] [总次数]` | 离屏渲染回放状态条并保存 PNG，同时打印窗口扩展样式（确认鼠标穿透确实生效） |
+| `--seltest` | 模拟点击第二个方案，验证单选互斥不会无限递归（需要 `recordings.json` 里至少 2 个方案） |
 | `--movetest <x> <y>` | 注入一次绝对定位并回报光标实际落点与 `SendInput` 返回值，用于确认当前环境允许注入 |
 | `--closetest <png> [busy]` | 离屏渲染「关闭还是最小化到托盘」询问框并保存 PNG（`busy` 展示有任务在运行时的文案） |
 | `--xclosetest <前缀>` | 自动模拟点 X：询问框出现 → 选最小化 → 再点 X → 选退出，日志记录各步结果 |

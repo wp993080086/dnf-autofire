@@ -481,6 +481,7 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 录制中切换了分辨率/显示器 | 采样坐标跳跃 | 记录 `screen` 快照，不做特殊处理，回放时给提示 |
 | 托盘退出时正在录制 | 数据丢失 | `ExitApp` 前先 `StopRecording(save: true)` |
 | 内存/文件异常 | 大方案写盘失败 | `try/catch` + `Logger.Error` + 状态栏红字提示，内存中的方案保留（可重试删除/重录） |
+| 方案列表有 2 个以上时切换选中 | 进程直接消失（`0xc00000fd` 栈溢出，日志里没有任何 Exception 记录） | 单选互斥的实现是「点 B → 取消 A」，而 A 的回调里又会把自己勾回来、顺带取消 B，两者来回递归到栈耗尽。`_syncingSelection` 置位期间直接 return，内部同步不再触发回调；回归入口 `--seltest` |
 
 ### 7.7 回放状态条（追加需求：回放时也要看得见进度）
 

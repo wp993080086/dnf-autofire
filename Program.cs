@@ -204,6 +204,18 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --seltest 模拟点击第二个方案，验证单选切换不会无限递归
+        if (args.Length >= 2 && args[1] == "--seltest")
+        {
+            var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(-3000, -3000) };
+            form.Show();
+            Application.DoEvents();
+            form.DebugSelectionTest();
+            Logger.Info("[seltest] 方法返回，进程仍在运行");
+            form.Close();
+            return;
+        }
+
         // 调试用：dnf-autofire --playoverlaytest <png> [第几次] [总次数] 离屏渲染回放状态条并截图
         if (args.Length >= 3 && args[1] == "--playoverlaytest")
         {

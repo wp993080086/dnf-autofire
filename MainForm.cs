@@ -76,6 +76,7 @@ public class MainForm : Form
     private MacroRecorder? _recorder;
     private RecordOverlayForm? _overlay;
     private string _selectedProfileId = "";
+    private bool _syncingSelection; // 单选互斥内部改勾选时置位，防止 CheckedChanged 互相触发
 
     // 回放
     private MacroPlayer? _player;
@@ -238,6 +239,32 @@ public class MainForm : Form
 
     /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
     internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
+
+    /// <summary>
+    /// 调试入口：--seltest 模拟「点第二个方案」，等价于用户在列表里切换选中项。
+    /// 用来验证单选互斥不会因为两个复选框互相改 Checked 而无限递归。
+    /// </summary>
+    internal void DebugSelectionTest()
+    {
+        if (_recSelection.Count < 2)
+        {
+            Logger.Info($"[seltest] 方案数 {_recSelection.Count}，需要至少 2 个才能测切换");
+            return;
+        }
+        var (target, chk) = _recSelection[1];
+        Logger.Info($"[seltest] 点击 {target.Name}（原选中 {SelectedProfile()?.Name ?? "无"}）");
+        chk.Checked = true; // 与用户鼠标点击走同一条路径
+        Logger.Info($"[seltest] 完成，当前选中 {SelectedProfile()?.Name ?? "无"}");
+
+        // 再点一次已选中项：应当被弹回勾选，不会变成"一个都没选"
+        chk.Checked = false;
+        Logger.Info($"[seltest] 取消已选中项后：Checked={chk.Checked} 选中={SelectedProfile()?.Name ?? "无"}");
+
+        // 切回第一个：验证反向切换同样不会递归
+        var (first, chk0) = _recSelection[0];
+        chk0.Checked = true;
+        Logger.Info($"[seltest] 切回 {first.Name}：选中={SelectedProfile()?.Name ?? "无"} {target.Name}.Checked={chk.Checked}");
+    }
 
     /// <summary>调试入口：--keytest 跑一遍开启前校验，返回结果（不启动引擎、不弹窗）。</summary>
     internal string DebugStartCheck()
@@ -1711,15 +1738,28 @@ public class MainForm : Form
     /// <summary>单选：点已选中的方案不会取消勾选（等价单选按钮）。</summary>
     private void OnProfileChecked(RecordProfile profile, AntCheckBox chk)
     {
+        // 程序自己取消别的勾选时也会回到这里：不挡住就是 A 取消 B、B 反弹勾选 A……一路递归到栈溢出
+        if (_syncingSelection) return;
+
         if (!chk.Checked)
         {
-            chk.Checked = true; // 不允许通过再次点击取消，只有切换才能改变选中
+            // 不允许通过再次点击取消选中，只有切换才能改变选中
+            _syncingSelection = true;
+            try { chk.Checked = true; }
+            finally { _syncingSelection = false; }
             return;
         }
         if (_selectedProfileId == profile.Id) return;
         _selectedProfileId = profile.Id;
-        foreach (var (p, c) in _recSelection)
-            if (p.Id != profile.Id && c.Checked) c.Checked = false;
+
+        _syncingSelection = true;
+        try
+        {
+            foreach (var (p, c) in _recSelection)
+                if (p.Id != profile.Id && c.Checked) c.Checked = false;
+        }
+        finally { _syncingSelection = false; }
+
         UpdateRecordUi();
         RefreshRunCard();
     }

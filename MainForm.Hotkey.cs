@@ -168,4 +168,16 @@ public partial class MainForm : Form
         if (s.Length == 1 && char.IsLetterOrDigit(s[0])) return s[0];
         return 0x75; // 兜底 F6
     }
+
+    /// <summary>四个热键槽位：界面标签名 + 当前生效值（界面上按 Tab 只显示其中一到两个）。</summary>
+    private (string Name, string Key)[] HotkeySlots() => new[]
+    {
+        ("连发热键", _config.StartHotkey),
+        ("连点热键", _config.MouseStartHotkey),
+        ("录制热键", _config.RecordHotkey),
+        ("回放热键", _config.PlaybackHotkey)
+    };
+
+    /// <summary>「连发/连点/录制」那个热键下拉框当前对应哪个槽位（跟着 Tab 走）。</summary>
+    private string StartKeySlot() => _tabIndex == TabRecord ? "录制热键" : _tabIndex == TabMouse ? "连点热键" : "连发热键";
 }

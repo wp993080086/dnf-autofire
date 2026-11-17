@@ -78,6 +78,8 @@ internal sealed class ClosePromptForm : Form
         Close();
     }
 
+#if DEBUG
     /// <summary>调试入口用：不走鼠标直接选一个结果（验证关闭询问的接线）。</summary>
     internal void ChooseForTest(Choice choice) => Pick(choice);
+#endif
 }

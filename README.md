@@ -153,6 +153,8 @@ dotnet publish -c Release -r win-x64 ^
 
 ## 调试参数
 
+只在 `Debug` 构建里存在（源码在 `Program.Debug.cs`，整段用 `#if DEBUG` 包住）；`Release` 构建里这些入口连字符串都不会进入程序集，正式发布的 exe 不响应任何调试参数，传入也只会正常启动主界面。
+
 | 参数 | 说明 |
 | --- | --- |
 | `--screenshot <path.png> [n] [mouse\|record]` | 离屏渲染主界面并保存 PNG（可选拦截参数：额外新增 n 行；`mouse`/`record` 切到对应 Tab） |

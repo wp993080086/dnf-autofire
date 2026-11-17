@@ -220,15 +220,6 @@ public partial class MainForm : Form
         };
     }
 
-    /// <summary>调试入口：--screenshot 模拟新增行。</summary>
-    internal void DebugAddEmptyRow() => AddEmptyRow();
-
-    /// <summary>调试入口：--screenshot … mouse 切到鼠标 Tab 再截图。</summary>
-    internal void DebugShowMouseTab() => DebugShowTab(TabMouse);
-
-    /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
-    internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
-
     /// <summary>主按钮开关当前 Tab 对应的引擎（按钮点击与热键共用此入口）。</summary>
     private void ToggleCurrentEngine()
     {
@@ -466,20 +457,6 @@ public partial class MainForm : Form
         SyncHotkeyUI();
     }
 
-    /// <summary>四个热键槽位：界面标签名 + 当前生效值（界面上按 Tab 只显示其中一到两个）。</summary>
-    private (string Name, string Key)[] HotkeySlots() => new[]
-    {
-        ("连发热键", _config.StartHotkey),
-        ("连点热键", _config.MouseStartHotkey),
-        ("录制热键", _config.RecordHotkey),
-        ("回放热键", _config.PlaybackHotkey)
-    };
-
-    /// <summary>「连发/连点/录制」那个热键下拉框当前对应哪个槽位（跟着 Tab 走）。</summary>
-    private string StartKeySlot() => _tabIndex == TabRecord ? "录制热键" : _tabIndex == TabMouse ? "连点热键" : "连发热键";
-
-    private static int Lerp(int a, int b, float t) => a + (int)Math.Round((b - a) * t);
-
     private void BuildTray()
     {
         trayMenu = new ContextMenuStrip();
@@ -506,19 +483,6 @@ public partial class MainForm : Form
         };
         trayIcon.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
     }
-
-    /// <summary>自动连按次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>
-    private static int NormalizeKeyRepeat(string text) => NormalizeCount(text, MaxKeyRepeat);
-
-    /// <summary>自动点击次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>
-    private static int NormalizeMouseRepeat(string text) => NormalizeCount(text, MaxMouseRepeat);
-
-    /// <summary>行内文字实测宽度：Label.AutoSize 要挂到父控件后才生效，布局阶段必须自己量。</summary>
-    private static int RowTextWidth(string text, bool bold = false) => RowTextWidth(text, 9f, bold);
-
-    private static int RowTextWidth(string text, float size, bool bold = false) => RowTextSize(text, size, bold).Width;
-
-    private static int ClampMs(int v) => Math.Clamp(v, MinMs, MaxMs);
 
     private void UpdateStatus(string text) => lblStatus.Text = text;
 }

@@ -126,4 +126,7 @@ public partial class MainForm : Form
             r.NumValue.Enabled = !locked && r.SelStop.SelectedIndex == 1; // 仅"自动点击"有数值框
         }
     }
+
+    /// <summary>自动点击次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>
+    private static int NormalizeMouseRepeat(string text) => NormalizeCount(text, MaxMouseRepeat);
 }

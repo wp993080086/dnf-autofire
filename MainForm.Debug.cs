@@ -1,6 +1,7 @@
 namespace DnfAutoFire;
 
-// 调试入口：由 Program 的调试命令行参数调用，与正式界面逻辑无关。
+#if DEBUG
+// 调试入口：只由 Program.Debug.cs 的调试命令行调用，Release 构建里不参与编译。
 public partial class MainForm : Form
 {
     /// <summary>调试入口：--screenshot 切页。index 与 TabTitles 下标一致。</summary>
@@ -411,4 +412,14 @@ public partial class MainForm : Form
         finally { g.ReleaseHdc(hdc); }
         bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
+
+    /// <summary>调试入口：--screenshot 模拟新增行。</summary>
+    internal void DebugAddEmptyRow() => AddEmptyRow();
+
+    /// <summary>调试入口：--screenshot … mouse 切到鼠标 Tab 再截图。</summary>
+    internal void DebugShowMouseTab() => DebugShowTab(TabMouse);
+
+    /// <summary>调试入口：--screenshot … record 切到录制 Tab 再截图。</summary>
+    internal void DebugShowRecordTab() => DebugShowTab(TabRecord);
 }
+#endif

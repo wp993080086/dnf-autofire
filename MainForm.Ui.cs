@@ -558,4 +558,11 @@ public partial class MainForm : Form
         var font = AntStyle.GetFont(size, bold ? FontStyle.Bold : FontStyle.Regular);
         return TextRenderer.MeasureText(text, font, Size.Empty, TextFormatFlags.NoPadding);
     }
+
+    private static int Lerp(int a, int b, float t) => a + (int)Math.Round((b - a) * t);
+
+    /// <summary>行内文字实测宽度：Label.AutoSize 要挂到父控件后才生效，布局阶段必须自己量。</summary>
+    private static int RowTextWidth(string text, bool bold = false) => RowTextWidth(text, 9f, bold);
+
+    private static int RowTextWidth(string text, float size, bool bold = false) => RowTextSize(text, size, bold).Width;
 }

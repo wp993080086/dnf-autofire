@@ -499,4 +499,9 @@ public partial class MainForm : Form
         cboStartKey.Enabled = !locked;
         cboMode.Enabled = !locked;
     }
+
+    /// <summary>自动连按次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>
+    private static int NormalizeKeyRepeat(string text) => NormalizeCount(text, MaxKeyRepeat);
+
+    private static int ClampMs(int v) => Math.Clamp(v, MinMs, MaxMs);
 }

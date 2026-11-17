@@ -18,7 +18,7 @@ public class MainForm : Form
     private const int MaxKeyRepeat = Limits.KeyCountMax;  // 自动连按次数上限（0 = 无限）
     private const int MaxMouseRepeat = Limits.MouseCountMax; // 自动点击次数上限（0 = 无限）
     private const int RowH = 34;
-    private const int RowWidth = 544;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
+    private const int RowWidth = 584;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
     private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
     private const int RecRowH = 30;        // 录制方案列表行高
     private const int RecListHeight = 120; // 方案列表可视高度（正好 4 行，超出滚动，不留半行）
@@ -123,7 +123,7 @@ public class MainForm : Form
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.White; // 无留白卡片：白色底 + 深色边框划分区域
-        ClientSize = new Size(600, 400);
+        ClientSize = new Size(640, 400);
 
         BuildUi();
         BuildTray();
@@ -1005,10 +1005,10 @@ public class MainForm : Form
     private void BuildUi()
     {
         // 主区域（Tab + 配置页）：三个区域（主区/启动区/设置区）以 2px 深色边框分隔，无留白卡片
-        var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(596, 302), BackColor = Color.White };
+        var pnlMain = new Panel { Location = new Point(2, 2), Size = new Size(636, 302), BackColor = Color.White };
 
         // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
-        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(596, 44), BackColor = Color.White, TabStop = true, TabIndex = 0 };
+        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(636, 44), BackColor = Color.White, TabStop = true, TabIndex = 0 };
         tabHeader.Paint += TabHeader_Paint;
         tabHeader.MouseClick += TabHeader_Click;
         tabHeader.MouseMove += TabHeader_Move;
@@ -1034,7 +1034,7 @@ public class MainForm : Form
             _pages[i] = new Panel
             {
                 Location = new Point(0, 44),
-                Size = new Size(596, 258),
+                Size = new Size(636, 258),
                 BackColor = Color.White,
                 Visible = i == TabKeys,
                 TabIndex = i + 1   // 排在 tabHeader 之后：Tab 键/tab 顺序里页签始终是第一个可选控件
@@ -1105,7 +1105,7 @@ public class MainForm : Form
 
         // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效
-        var pnlSet = new Panel { Location = new Point(298, 306), Size = new Size(300, 92), BackColor = Color.White };
+        var pnlSet = new Panel { Location = new Point(298, 306), Size = new Size(340, 92), BackColor = Color.White };
         lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
         lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
@@ -2291,48 +2291,47 @@ public class MainForm : Form
         row.TxtKey = new AntInput
         {
             Location = new Point(58, 3),
-            Size = new Size(52, 28)
+            Size = new Size(56, 28)
         };
         row.TxtKey.Inner.MaxLength = 2;   // 单字符 A-Z/0-9；小键盘数字为 N0-N9 两字符
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
         row.TxtKey.Text = key;
 
-        // 控件按实测文字宽度顺排，间距统一 6px（Label.AutoSize 挂到父控件后 Right 才有值）。
-        // 宽度都按内容给足：键 2 字符、间隔 4 位数、下拉「自动连按」、次数 5 位数；
-        // 「次」紧跟次数框，行尾留给「删除」，两者互不重叠。
-        int x = 58 + 52 + 6;
+        // 控件按实测文字宽度顺排，间距统一 8px（Label.AutoSize 挂到父控件后 Right 才有值）。
+        // 宽度沿用原来的一版：键名 56、间隔 84、下拉 96、次数 72；「次」紧跟次数框，行尾留给「删除」。
+        int x = 58 + 56 + 8;
         var lblGap = MakeRowText("键，间隔", x);
-        x += RowTextWidth("键，间隔") + 6;
+        x += RowTextWidth("键，间隔") + 8;
         row.TxtMs = new AntNumber
         {
             Location = new Point(x, 3),
-            Size = new Size(78, 28),
+            Size = new Size(84, 28),
             Step = KeyStepMs,
             Min = MinMs,
             Max = MaxMs
         };
         row.TxtMs.Text = ms.ToString();
-        x += 78 + 6;
+        x += 84 + 8;
         var lblMs = MakeRowText("毫秒，", x);
-        x += RowTextWidth("毫秒，") + 6;
-        row.SelStop = new AntSelect { Location = new Point(x, 2), Width = 84 };
-        row.SelStop.Inner.DropDownWidth = 84;
+        x += RowTextWidth("毫秒，") + 8;
+        row.SelStop = new AntSelect { Location = new Point(x, 2), Width = 96 };
+        row.SelStop.Inner.DropDownWidth = 96;
         row.SelStop.Inner.Items.Add("松手停止");
         row.SelStop.Inner.Items.Add("自动连按");
         row.SelStop.SelectedIndex = stopMode == "auto" ? 1 : 0; // 先定下拉框，事件尚未挂上
-        x += 84 + 6;
+        x += 96 + 8;
         row.NumCount = new AntNumber
         {
             Location = new Point(x, 3),
-            Size = new Size(64, 28),
+            Size = new Size(72, 28),
             Step = 1,
             Min = 0,
             Max = MaxKeyRepeat
         };
         row.NumCount.Text = "0"; // 0 = 无限
         row.NumCount.Inner.MaxLength = 5;
-        x += 64 + 6;
+        x += 72 + 6;
         row.LblCount = MakeRowText("次", x); // 单位跟着次数框一起显隐
         ApplyKeyStopMode(row, stopMode, stopValue); // 初始收口：松手停止时隐藏次数框
         row.LnkDel = new AntButton

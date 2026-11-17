@@ -9,6 +9,7 @@ namespace DnfAutoFire;
 /// 按住不放只算一次，按下/抬起窗口短于 1 帧又会被整段错过。
 /// 因此调度上强制「按下保持 ≥20ms、抬起 ≥20ms」，有效间隔下限 40ms（60 帧游戏）。
 /// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
+/// 工作线程没有「固定节拍」：按每个键的到期时刻等待，没人按键时阻塞在事件上零唤醒。
 /// </summary>
 internal sealed class AutoFireEngine
 {
@@ -31,9 +32,11 @@ internal sealed class AutoFireEngine
     }
 
     private readonly List<KeyState> _keys = new();
+    private readonly AutoResetEvent _wake = new(false); // 按键 / 松手 / 停止时唤醒工作线程，空闲时它就一直睡着
     private KeyboardHook? _hook;
     private Thread? _worker;
     private volatile bool _stop;
+    private readonly object _periodSync = new();
     private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
     // 测试用：设置环境变量 DNF_DRYRUN=1 时不真正注入按键，只跑调度计数
@@ -41,7 +44,13 @@ internal sealed class AutoFireEngine
 
     private static void Send(int vk, bool up)
     {
-        if (DryRun) return;
+        if (DryRun)
+        {
+#if DEBUG
+            EngineProbe.Record(0, up); // 空跑时只记时间戳，供改前改后对比调度精度
+#endif
+            return;
+        }
         NativeInput.SendKey(vk, up);
     }
 
@@ -82,11 +91,8 @@ internal sealed class AutoFireEngine
         _hook.KeyUp += OnKeyUp;
 
         _stop = false;
-        if (!_periodRaised)
-        {
-            timeBeginPeriod(1); // 把系统计时精度提到 1ms，Sleep(1) 才真正约 1ms
-            _periodRaised = true;
-        }
+        _wake.Reset();   // 上一次停止可能留下一次唤醒信号，先吃掉
+        // 1ms 计时精度不在这里要：工作线程只在真要连发时才提精度，空闲时把系统计时器还回去
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "AutoFireEngine" };
         _worker.Start();
         _hook.Install();
@@ -96,13 +102,10 @@ internal sealed class AutoFireEngine
     public void Stop()
     {
         _stop = true;
+        _wake.Set();   // 线程可能正睡在无限等待里，叫醒它才能及时退出
         try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
-        if (_periodRaised)
-        {
-            timeEndPeriod(1);
-            _periodRaised = false;
-        }
+        SetPeriod(false);
         // 释放仍处于"模拟按下"状态的键，避免卡键
         foreach (var k in _keys)
         {
@@ -116,6 +119,9 @@ internal sealed class AutoFireEngine
         _hook?.Dispose();
         _hook = null;
         Running = false;
+#if DEBUG
+        if (DryRun) EngineProbe.Report(0, "连发");
+#endif
     }
 
     private void WorkerLoop()
@@ -183,7 +189,49 @@ internal sealed class AutoFireEngine
                 AllDone?.Invoke();
                 break;
             }
-            Thread.Sleep(1);
+            if (_stop) break;
+            WaitNext(sw);
+        }
+    }
+
+    /// <summary>
+    /// 等到「最早的到期时刻」，或有人按下/松开/停止时被立即叫醒。
+    /// 一个键都没在连发时用无限等待——工作线程真正睡着，不再 1ms 轮询。
+    /// </summary>
+    private void WaitNext(Stopwatch sw)
+    {
+        long now = sw.ElapsedTicks;
+        long earliest = long.MaxValue;
+        foreach (var k in _keys)
+        {
+            if (k.Done || !k.Held) continue;
+            if (k.NextDue < earliest) earliest = k.NextDue;
+        }
+
+        bool idle = earliest == long.MaxValue;
+        // 只有真要连发时才需要 1ms 精度（按下/抬起各 20ms 靠它对齐帧），空闲时还给系统
+        SetPeriod(!idle);
+        if (idle)
+        {
+            _wake.WaitOne();
+            return;
+        }
+
+        long left = earliest - now;
+        if (left <= 0) return; // 已经到期，直接回循环处理，不用睡
+        int ms = (int)Math.Min((left * 1000 + Stopwatch.Frequency - 1) / Stopwatch.Frequency, 1000);
+        if (ms <= 0) return;
+        _wake.WaitOne(ms);
+    }
+
+    /// <summary>提/还系统计时精度（1ms）。加锁只为防 Stop 与工作线程同时改（Join 超时的极端情况）。</summary>
+    private void SetPeriod(bool on)
+    {
+        lock (_periodSync)
+        {
+            if (_periodRaised == on) return;
+            if (on) timeBeginPeriod(1); else timeEndPeriod(1);
+            _periodRaised = on;
         }
     }
 
@@ -197,6 +245,7 @@ internal sealed class AutoFireEngine
         k.Held = true;
         k.IsDown = false;
         k.NextDue = 0; // 立刻补一发，模拟真实单击
+        _wake.Set();   // 工作线程可能正空闲等待，叫醒它马上开火
     }
 
     private void OnKeyUp(int vk)
@@ -206,5 +255,6 @@ internal sealed class AutoFireEngine
         if (Mode == "B") _hook!.SuppressCurrent();
         if (k.Mode == TriggerMode.Auto) return; // 自动连按不受松手影响
         k.Held = false; // 抬起由 WorkerLoop 统一处理（若正按着会立即释放）
+        _wake.Set();    // 可能正睡在「等下一次按下」，立刻醒来补抬起
     }
 }

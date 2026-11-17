@@ -171,11 +171,14 @@ dotnet publish -c Release -r win-x64 ^
 | `--closetest <png> [busy]` | 离屏渲染「关闭还是最小化到托盘」询问框并保存 PNG（`busy` 展示有任务在运行时的文案） |
 | `--xclosetest <前缀>` | 自动模拟点 X：询问框出现 → 选最小化 → 再点 X → 选退出，日志记录各步结果 |
 
+配 `DNF_DRYRUN=1` 空跑时，`--enginetest` / `--mousetest` 结束会多打一行 `[probe]` 统计（次数、周期均值、最大间隔、标准差、迟到次数、按下保持时长），用来核对调度精度有没有退化。
+
 ## 技术实现
 
 - **键盘钩子**：`SetWindowsHookEx(WH_KEYBOARD_LL)` 低级钩子，过滤自身注入事件防止自我触发
 - **鼠标钩子**：`SetWindowsHookEx(WH_MOUSE_LL)` 低级钩子（`LLMHF_INJECTED` 过滤自身注入的点击），触发时拦截原生点击由引擎统一注入
 - **按键模拟**：`SendInput` 扫描码方式发送（键盘）/ `MOUSEEVENTF_*` 标志（鼠标），兼容性最好
+- **连发 / 连点调度**：工作线程按 `Stopwatch` 维护每个目标的「下次到期时刻」，用完就阻塞在 `AutoResetEvent` 上——没人按键时零唤醒（实测 525 次/秒 → 0），按键/松手/停止时立即叫醒（唤醒延迟 ~0.03ms，比 1ms 轮询的 ~1ms 更快）；`timeBeginPeriod(1)` 也只在真有键要连发时申请，空闲时把系统计时精度还回去
 - **轨迹录制**：`WH_MOUSE_LL` 回调里只做「过滤 + 预分配列表 Add」，不写文件、不碰 UI，避免回调超时被系统静默摘钩；悬浮条矩形整块排除、两级时间/位移降噪
 - **轨迹回放**：独立高精度线程按录制时间轴重放（`timeBeginPeriod(1)` + 1ms 轮询）；定位用 `MOUSEEVENTF_ABSOLUTE | VIRTUALDESK` 归一化到虚拟桌面，多屏负坐标与 125%/150% 缩放都和录制一致；相邻移动间隔 ≥32ms 且位移 ≥4px 时按 16ms 补点，点击按下/抬起至少保持 20ms；回放状态条挂 `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE`，只显示不接鼠标，轨迹点过去也不会被它吞掉
 - **全局热键**：`RegisterHotKey` + `WM_HOTKEY` 消息

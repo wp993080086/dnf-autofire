@@ -9,6 +9,7 @@ namespace DnfAutoFire;
 /// 自动点击：开启后按间隔自动点击，不需要按住，次数跑完由引擎收尾（次数 0 = 一直点）。
 /// 调度与键盘一致：按下/抬起各保持 ≥20ms，有效间隔下限 40ms（游戏按帧轮询）。
 /// 松手停止行触发时拦截原生点击（吞掉按下与配对的抬起），由引擎统一注入，避免重复点击。
+/// 工作线程与键盘同构：按到期时刻等待，没人按键时阻塞在事件上零唤醒。
 /// </summary>
 internal sealed class MouseClickEngine
 {
@@ -31,11 +32,13 @@ internal sealed class MouseClickEngine
     }
 
     private readonly List<ClickState> _tasks = new();
+    private readonly AutoResetEvent _wake = new(false); // 按下 / 松开 / 停止时唤醒工作线程，空闲时它就一直睡着
     private readonly Stopwatch _sw = new();
     private MouseHook? _hook;
     private Thread? _worker;
     private volatile bool _stop;
     private readonly bool[] _swallowUp = new bool[5]; // 按 VK 键码索引（1/2/4）：按下被拦截时，配对的抬起也要拦截
+    private readonly object _periodSync = new();
     private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
     public bool Running { get; private set; }
@@ -48,7 +51,13 @@ internal sealed class MouseClickEngine
 
     private static void Send(int button, bool up)
     {
-        if (DryRun) return;
+        if (DryRun)
+        {
+#if DEBUG
+            EngineProbe.Record(1, up); // 空跑时只记时间戳，供改前改后对比调度精度
+#endif
+            return;
+        }
         NativeInput.SendMouseButton(button, up);
     }
 
@@ -82,11 +91,8 @@ internal sealed class MouseClickEngine
 
         _stop = false;
         _sw.Restart();
-        if (!_periodRaised)
-        {
-            timeBeginPeriod(1);
-            _periodRaised = true;
-        }
+        _wake.Reset();   // 上一次停止可能留下一次唤醒信号，先吃掉
+        // 1ms 计时精度不在这里要：工作线程只在真要连点时才提精度，空闲时把系统计时器还回去
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "MouseClickEngine" };
         _worker.Start();
         _hook.Install();
@@ -96,14 +102,11 @@ internal sealed class MouseClickEngine
     public void Stop()
     {
         _stop = true;
+        _wake.Set();   // 线程可能正睡在无限等待里，叫醒它才能及时退出
         try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
         _sw.Stop();
-        if (_periodRaised)
-        {
-            timeEndPeriod(1);
-            _periodRaised = false;
-        }
+        SetPeriod(false);
         // 释放仍处于"模拟按下"状态的鼠标键，避免卡键
         foreach (var t in _tasks)
         {
@@ -119,6 +122,9 @@ internal sealed class MouseClickEngine
         _hook?.Dispose();
         _hook = null;
         Running = false;
+#if DEBUG
+        if (DryRun) EngineProbe.Report(1, "连点");
+#endif
     }
 
     private void WorkerLoop()
@@ -183,7 +189,49 @@ internal sealed class MouseClickEngine
                 AllDone?.Invoke();
                 break;
             }
-            Thread.Sleep(1);
+            if (_stop) break;
+            WaitNext();
+        }
+    }
+
+    /// <summary>
+    /// 等到「最早的到期时刻」，或有人按下/松开/停止时被立即叫醒。
+    /// 一行都没在连点时用无限等待——工作线程真正睡着，不再 1ms 轮询。
+    /// </summary>
+    private void WaitNext()
+    {
+        long now = _sw.ElapsedTicks;
+        long earliest = long.MaxValue;
+        foreach (var t in _tasks)
+        {
+            if (t.Done || !t.Held) continue;
+            if (t.NextDue < earliest) earliest = t.NextDue;
+        }
+
+        bool idle = earliest == long.MaxValue;
+        // 只有真要连点时才需要 1ms 精度（按下/抬起各 20ms 靠它对齐帧），空闲时还给系统
+        SetPeriod(!idle);
+        if (idle)
+        {
+            _wake.WaitOne();
+            return;
+        }
+
+        long left = earliest - now;
+        if (left <= 0) return; // 已经到期，直接回循环处理，不用睡
+        int ms = (int)Math.Min((left * 1000 + Stopwatch.Frequency - 1) / Stopwatch.Frequency, 1000);
+        if (ms <= 0) return;
+        _wake.WaitOne(ms);
+    }
+
+    /// <summary>提/还系统计时精度（1ms）。加锁只为防 Stop 与工作线程同时改（Join 超时的极端情况）。</summary>
+    private void SetPeriod(bool on)
+    {
+        lock (_periodSync)
+        {
+            if (_periodRaised == on) return;
+            if (on) timeBeginPeriod(1); else timeEndPeriod(1);
+            _periodRaised = on;
         }
     }
 
@@ -203,6 +251,7 @@ internal sealed class MouseClickEngine
         t.Done = false;
         t.IsDown = false;
         t.NextDue = 0; // 立刻补一发，模拟真实单击
+        _wake.Set();   // 工作线程可能正空闲等待，叫醒它马上开点
     }
 
     private void OnButtonUp(int button)
@@ -216,5 +265,6 @@ internal sealed class MouseClickEngine
             _swallowUp[button] = false;
         }
         t.Held = false; // 松开即停，抬起由 WorkerLoop 统一处理
+        _wake.Set();    // 可能正睡在「等下一次按下」，立刻醒来补抬起
     }
 }

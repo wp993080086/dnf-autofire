@@ -150,6 +150,8 @@ stateDiagram-v2
 
 高度从 400 → **470**（宽度保持 600）。加高只为录制页（方案列表 + 录制/回放两行设置），按键页与鼠标页不需要更多高度：
 
+> **落地偏差**：实际**没有加高**——三行鼠标配置 + 提示、录制页（列表 4 行 + 录制行 + 回放行 + 两行提示）在原有 `ClientSize = 600×400`（页面 596×258）里都排得下，所以最终只调整了页内坐标。下面的 470 布局图保留为当初的设计推演。
+
 ```
 ClientSize = 600 × 470
 ┌────────────────────────────────────────────────────────────┐ y=2
@@ -189,12 +191,14 @@ ClientSize = 600 × 470
 | `MouseHook.cs` | 修改 | 支持中键；新增 `Move` 事件（仅在订阅时回调，避免连点场景开销） |
 | `AppConfig.cs` | 修改 | ✅ `KeyConfig.StopMode/StopValue`（R1 已加）；R2 再加 `MouseClickConfig.StopMode` 的 `auto` 取值；录制回放新增 `RecordHotkey` / `PlaybackHotkey` |
 | `AutoFireEngine.cs` | 修改 | ✅ `KeyTarget` 带 `TriggerMode` + `Count`，自动行由引擎自己置 `Held`，跑完置 `Done` 并触发 `AllDone` |
-| `MainForm.cs` | 修改 | ✅ Tab 化重构、按键页停止条件与键名校验；待做：窗口 470、热键注册与冲突校验、托盘菜单、关闭逻辑、调试入口 |
-| `Program.cs` | 修改 | 调试参数扩展（`--screenshot <path> record`、`--recordtest`/`--playtest`、`--keytest` 已加） |
-| `README.md` / `CHANGELOG.md` | 修改 | 功能说明、配置示例、1.2.0 条目 |
-| `dnf-autofire.csproj` | 修改 | `<Version>1.2.0</Version>`（发版时改） |
+| `MainForm.cs` | 修改 | ✅ 全部落地：Tab 化重构、按键页停止条件与键名校验、鼠标页三行与自动点击、录制页与回放行、4 个热键注册与重复校验、托盘菜单、关闭/互斥逻辑、调试入口（窗口未加高，仍是 400） |
+| `Program.cs` | 修改 | ✅ 调试参数已全部加上（`--screenshot <path> record`、`--recordtest`/`--playtest`/`--movetest`/`--keytest`） |
+| `README.md` / `CHANGELOG.md` | 修改 | ✅ 功能说明、配置示例、1.2.0 条目、录制页截图 |
+| `dnf-autofire.csproj` | 修改 | ✅ `<Version>1.2.0</Version>` |
 
 `MainForm.cs` 现在已经 1500 行，录制页会再涨一截。**录制页用 partial 类分文件**（`MainForm.Record.cs`），既有页面暂不拆分（避免无谓 diff），后续可另行拆成 `MainForm.Keys.cs` / `MainForm.Mouse.cs`。
+
+> **落地偏差**：最终没有拆 `MainForm.Record.cs`——录制/回放部分在 `MainForm.cs` 内按 `// ---------- 录制 ----------` / `// ---------- 回放 ----------` 分段，独立逻辑都放在 `MacroRecorder` / `MacroPlayer` / `RecordStore` / `RecordOverlayForm` 四个文件里，`MainForm` 只留 UI 粘合。真要拆，等它超过 3000 行再说。
 
 ---
 
@@ -562,9 +566,9 @@ MacroPlayer.Start(profile, repeatMode, value)
 | **P2 R2 自动点击（已完成）** | 鼠标页每行加「自动点击」+ 次数；滚轮（中键）第三行；中键常量与 `SendMouseButton(int,bool)` | 可用的 R2 | 左/中/右三键各测；次数到点自停；与按键页自动行可同时开 |
 | **P3 录制（已完成）** | `MouseHook` 扩展（Move/中键 + 坐标时间戳）、`MacroRecorder`、`RecordStore`（`recordings.json`）、录制页方案列表（单选/改名/删除）、`RecordOverlayForm` 悬浮条、`F9`、托盘项 | 可录制、可管理方案 | 录 3 个方案、重启后还在；高频移动不掉点、不被摘钩；悬浮条区域不进录制 |
 | **P4 回放（已完成）** | `MacroPlayer`（循环/定时/插值/停止释放）、`F10`、录制页回放设置行、`RefreshRunCard` 联动、`--playtest`/`--movetest` | 完整 R3 | N 次/一直/定时三种模式正确；停止立即生效；多屏与 125% 缩放位置准确 |
-| **P5 打磨发版** | 真机复测、文案/README/CHANGELOG、截图、`Version=1.2.0`、tag | v1.2.0 | 各项功能同时可开不互相干扰；托盘/热键/配置全通 |
+| **P5 打磨发版（已完成）** | 真机复测、文案/README/CHANGELOG、截图（`docs/screenShot_3.png`）、`Version=1.2.0`、tag | v1.2.0 | 各项功能同时可开不互相干扰；托盘/热键/配置全通 |
 
-每阶段的"验收标准"就是提测清单。P0a / P0b / P1a / P1b / P2 / P3 / P4 已落地（`v1.2.0` 分支），剩下 P5 发版。
+每阶段的"验收标准"就是提测清单。P0a / P0b / P1a / P1b / P2 / P3 / P4 / P5 已全部落地（`v1.2.0` 分支，`<Version>1.2.0</Version>`）。
 
 > 实际落地与计划的差异：窗口没有加高到 470 —— 三行鼠标配置 + 提示在原有 400 高度里排得下（`RecListHeight=120` 正好 4 行），所以只调整了页面内坐标；录制页的回放设置压在录制行下方一行（模式 / 数值 / 已选方案），底部提示拆两行。
 >
@@ -623,24 +627,26 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 回放方案 | **单选**（勾一个） |
 | 录制时的窗口 | 主窗口收托盘，屏幕上留**置顶悬浮小条**显示录制中，不再整窗隐藏 |
 | 热键 | 默认 F6 连发 / F8 连点 / F9 录制 / F10 回放，**全部可自定义并保存配置** |
-| 窗口高度 | 400 → 470 |
+| 窗口高度 | 400 → 470（实际未加高：三行鼠标配置与提示在原 400 内排得下，见 §10 备注） |
 | 方案上限 | **10 个**；单次 10 分钟 / 6 万点 |
 | Tab 顺序 | 按键 / 鼠标 / 录制（已实现，不再增加第 4 项） |
 
-**待确认**
+**原待确认项（v1.2.0 已按下列方式落地）**
 
-1. **自动点击的行形态**：按 R1 的方式做成「左/右/中各一行 + 行内停止条件（松手停止 / 自动连点 + 次数）」可以吗？还是三行都要能自动？
-2. **悬浮条细节**：默认右下角、约 220×52、可拖动、显示「● 录制中 00:03.2 · 128 点」+ ■ 停止按钮。要不要再加「暂停/继续」？要不要支持最小化成一个小圆点？
-3. 小键盘键在 **NumLock 关闭**时无法作为"松手停止"目标（系统上报的是方向键/`VK_CLEAR`），这个限制可以接受吗？
-4. 窗口加高到 470 之后按键页多出约 78px 空白，要不要把行数上限从 5 提到 7？
+| 项 | 落地结果 |
+| --- | --- |
+| 自动点击的行形态 | 采用「左 / 右 / 滚轮 三行 + 行内停止条件」：三行都可单独切成「自动点击」，次数 `0` = 一直点；全部行都为自动点击时才在次数跑完后整体自停 |
+| 悬浮条细节 | 236×44、右下角起、可拖动，显示红点 + 计时 + 点数 + ■；**未做暂停/继续与最小化圆点**，留作后续 |
+| NumLock 关闭时的小键盘 | 保留限制：`N0-N9` 在 NumLock 关闭时按不出来（自动连按行不受影响），不额外做方向键映射——映射会与真方向键冲突 |
+| 行数上限 5 → 7 | 不做：窗口未加高，5 行是 328 高页面内的实际上限 |
 
 ---
 
 ## 附：关键改动锚点速查
 
-> P0a / P1a / P1b 已落地，函数/字段名比行号稳定，按名字找。
+> 全部阶段已落地，函数/字段名比行号稳定，按名字找。
 
-| 位置 | 状态 | 要做的事 |
+| 位置 | 状态 | 说明 |
 | --- | --- | --- |
 | `MainForm.TabTitles` / `_pages[]` / `DebugShowTab` | ✅ 已完成 | Tab 数组化，加页 = 数组加一项 + BuildUi 加一行构建调用 |
 | `MainForm.AddRow` / `RowControls` / `ApplyKeyStopMode` | ✅ 已完成 | 行内停止条件（松手停止 / 自动连按 + 次数框） |
@@ -648,18 +654,15 @@ MacroPlayer.Start(profile, repeatMode, value)
 | `MainForm.KeyBox_KeyPress` / `KeyBox_KeyDown` / `KeyBox_TextChanged` | ✅ 已完成 | 键名输入拦截、小键盘 `N0-N9`、去重 |
 | `MainForm.KeyTextToVk` / `SanitizeKeyText` | ✅ 已完成 | 键名 ↔ VK 映射（含小键盘）与脏值归一 |
 | `AutoFireEngine.KeyTarget` / `AllDone` | ✅ 已完成 | 触发方式 + 次数；全自动行跑完自停 |
-| `MainForm.BuildUi` 里 `ClientSize`（600×400） | 待做 | 改 600×470 |
-| `MainForm.BuildUi` 里 `pnlMain.Size`（596×302） | 待做 | 改 596×372 |
-| `MainForm.BuildUi` 里页面 `Size`（596×258） | 待做 | 改 596×328 |
-| `MainForm.BuildUi` 两个底部面板 `Location.Y`（306） | 待做 | 改 376 |
-| `MainForm.OnPaint`（304 / 296 / `Height-304`） | 待做 | 改 374 / 296→保持 / `Height-374` |
-| `MainForm.BuildMousePage` / `ApplyMouseStopMode` | 待做 | 加第三行「中键」与「自动连点」选项 + 次数框 |
-| `MainForm.WndProc`（`WM_HOTKEY`） | 待做 | 增 2 个 ID：3=录制 4=回放 |
-| `MainForm.SaveConfig` / `LoadConfigToUi` | 部分完成 | `Keys[].StopMode/StopValue` 已加；待加 `RecordHotkey` / `PlaybackHotkey` |
-| `MainForm.RegisterHotkeys` / `UnregisterHotkeys` | 待做 | 注册/注销 4 个热键 + 重复校验 |
-| `MainForm.BuildTray` | 待做 | 托盘菜单增录制/回放项 |
-| `MainForm.WheelFilter` | 待做 | 改为作用于当前 Tab 的滚动区 |
-| `NativeMethods` | 待做 | 中键常量、`WM_MOUSEMOVE`、`MOUSEEVENTF_MOVE/ABSOLUTE/VIRTUALDESK`、`GetSystemMetrics` |
-| `NativeInput.SendMouseButton` | 待做 | `(bool,bool)` → `(int,bool)`；`MouseClickEngine` 5 处调用同步 |
-| `Program.cs` | 部分完成 | `--screenshot … mouse/record`、`--keytest` 已可用；待补 `--playtest` / `--recordtest` |
+| `MainForm.BuildUi` 里 `ClientSize` / `pnlMain` / 页面 `Size` / 底部分隔线 Y | ✅ 定稿 | **保持** `ClientSize` 600×400、页面 596×258（未按 470 加高，见 §10 备注） |
+| `MainForm.BuildMousePage` / `ApplyMouseStopMode` | ✅ 已完成 | 左 / 右 / 滚轮三行 + 「松手停止 / 自动点击」+ 次数框 |
+| `MainForm.WndProc`（`WM_HOTKEY`） | ✅ 已完成 | 4 个 ID：1 连发 2 连点 3 录制 4 回放 |
+| `MainForm.SaveConfig` / `LoadConfigToUi` | ✅ 已完成 | `Keys[].StopMode/StopValue`、`MouseClicks[]`、`RecordHotkey` / `PlaybackHotkey` / `PlayMode` / `PlayValue` 全量读写 |
+| `MainForm.RegisterHotkeys` / `UnregisterHotkeys` | ✅ 已完成 | 注册/注销 4 个热键 + 同名键只注册一次并提示重复项 |
+| `MainForm.BuildTray` | ✅ 已完成 | 托盘菜单含开始/停止录制、开始/停止回放；悬停提示随状态变化 |
+| `MainForm.WheelFilter` | ✅ 已完成 | 作用于当前 Tab 的滚动区（方案列表 / 按键行区） |
+| `NativeMethods` | ✅ 已完成 | 中键常量、`WM_MOUSEMOVE`、`MOUSEEVENTF_MOVE/ABSOLUTE/VIRTUALDESK`、`GetSystemMetrics` |
+| `NativeInput.SendMouseButton` / `SendMouseMoveAbsolute` | ✅ 已完成 | 改为 `(int vk, bool up)` 与绝对定位，返回 bool 以暴露注入失败 |
+| `RecordStore` / `MacroRecorder` / `MacroPlayer` / `RecordOverlayForm` | ✅ 已完成 | 方案存储、录制、回放、录制悬浮条 |
+| `Program.cs` | ✅ 已完成 | `--screenshot`（含 `mouse`/`record`）、`--uitest`、`--keytest`、`--recordtest`、`--playtest`、`--movetest`、`--mouselayout`、`--mousetest` |
 

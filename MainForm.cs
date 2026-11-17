@@ -644,6 +644,7 @@ public class MainForm : Form
                 break;
         }
         RefreshStatus(); // 状态栏同时展示各引擎状态
+        UpdateTrayText();
     }
 
     private static string DescribeStopMode(MouseClickEngine.StopMode mode, int value) => mode switch
@@ -841,23 +842,45 @@ public class MainForm : Form
         UnregisterHotkeys();
         var handle = Handle; // 强制创建句柄
 
-        // 连发热键（按键页配置，默认 F6）
-        bool okKeys = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_START, 0, (uint)HotkeyStringToVk(_config.StartHotkey));
-        // 连点热键（鼠标页配置，默认 F8）
-        bool okMouse = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_MOUSE, 0, (uint)HotkeyStringToVk(_config.MouseStartHotkey));
-        // 录制热键（录制页配置，默认 F9）
-        bool okRecord = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_RECORD, 0, (uint)HotkeyStringToVk(_config.RecordHotkey));
-        // 回放热键（录制页配置，默认 F10）
-        bool okPlay = NativeMethods.RegisterHotKey(handle, HOTKEY_ID_PLAY, 0, (uint)HotkeyStringToVk(_config.PlaybackHotkey));
-
-        var failed = new List<string>();
-        if (!okKeys) failed.Add(_config.StartHotkey);
-        if (!okMouse) failed.Add(_config.MouseStartHotkey);
-        if (!okRecord) failed.Add(_config.RecordHotkey);
-        if (!okPlay) failed.Add(_config.PlaybackHotkey);
-        if (failed.Count > 0)
+        // 四个热键同表处理：同一个键重复配置时只注册一次。
+        // 否则后一个 RegisterHotKey 必然失败，会被误报成"被其他程序占用"。
+        var defs = new (int Id, string Name, string Key)[]
         {
-            string names = string.Join("、", failed);
+            (HOTKEY_ID_START, "连发", _config.StartHotkey),
+            (HOTKEY_ID_MOUSE, "连点", _config.MouseStartHotkey),
+            (HOTKEY_ID_RECORD, "录制", _config.RecordHotkey),
+            (HOTKEY_ID_PLAY, "回放", _config.PlaybackHotkey)
+        };
+
+        var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var duplicated = new List<string>();
+        var occupied = new List<string>();
+
+        foreach (var (id, name, key) in defs)
+        {
+            string k = (key ?? "").Trim();
+            if (k.Length == 0) continue;
+
+            if (owners.TryGetValue(k, out string? owner))
+            {
+                duplicated.Add($"{k}（{owner}/{name}）");
+                continue;
+            }
+            if (!NativeMethods.RegisterHotKey(handle, id, 0, (uint)HotkeyStringToVk(k)))
+                occupied.Add(k);
+            else
+                owners[k] = name;
+        }
+
+        if (duplicated.Count > 0)
+        {
+            string names = string.Join("、", duplicated);
+            Logger.Info($"热键重复配置：{names}（同名键只注册一次，另一项不可用）");
+            UpdateStatus("警告：热键重复 " + names);
+        }
+        if (occupied.Count > 0)
+        {
+            string names = string.Join("、", occupied);
             Logger.Info($"热键注册失败：{names}（可能被其他程序占用）");
             UpdateStatus("警告：热键 " + names + " 注册失败（可能被其他程序占用）");
         }
@@ -1804,6 +1827,20 @@ public class MainForm : Form
         }
         if (cboStartKey != null && _tabIndex == TabRecord) cboStartKey.Enabled = !locked;
         if (cboPlayKey != null && _tabIndex == TabRecord) cboPlayKey.Enabled = !locked;
+        UpdateTrayText();
+    }
+
+    /// <summary>托盘悬停提示：录制 &gt; 回放 &gt; 引擎运行 &gt; 空闲（Windows 限制长度，超出截断）。</summary>
+    private void UpdateTrayText(string? progress = null)
+    {
+        if (trayIcon == null) return;
+        string text =
+            _recorder != null ? "DNF 连发 · 录制中"
+            : _player != null ? progress ?? "DNF 连发 · 回放中"
+            : _engine.Running || _mouseEngine.Running ? "DNF 连发 · 运行中"
+            : "DNF 连发";
+        if (text.Length > 60) text = text[..60];
+        trayIcon.Text = text;
     }
 
     /// <summary>当前选中的方案（列表单选，<see cref="_selectedProfileId"/> 为空表示没选）。</summary>
@@ -1847,6 +1884,7 @@ public class MainForm : Form
         lblRecStatus.Text = p.InjectBlocked
             ? "回放中 · 注入被系统拦截，请以管理员运行"
             : $"回放中 {p.ProfileName} · 第 {Math.Max(1, p.Loop)} 轮 · {FormatDuration(p.ElapsedMs)}";
+        UpdateTrayText($"DNF 连发 · 回放 {p.ProfileName} 第 {Math.Max(1, p.Loop)} 轮 {FormatDuration(p.ElapsedMs)}");
     }
 
     private void TogglePlayback()

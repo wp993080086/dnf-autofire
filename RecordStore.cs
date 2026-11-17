@@ -83,11 +83,17 @@ internal static class RecordStore
             if (!File.Exists(FilePath)) return new List<RecordProfile>();
             var file = JsonSerializer.Deserialize<RecordFile>(File.ReadAllText(FilePath), JsonOptions);
             var list = file?.Profiles ?? new List<RecordProfile>();
-            // 脏数据兜底：缺 id 的补一个，方案名空的按顺序补
+            // 脏数据兜底：缺 id 的补一个，点位列表不能为 null
             foreach (var p in list)
             {
                 if (string.IsNullOrEmpty(p.Id)) p.Id = NewId();
                 p.Points ??= new List<RecordPoint>();
+            }
+            // 手改文件塞超量方案时按上限截断（只影响内存，不主动改写文件）
+            if (list.Count > MaxProfiles)
+            {
+                Logger.Info($"recordings.json 方案数 {list.Count} 超过上限，仅加载前 {MaxProfiles} 个");
+                list.RemoveRange(MaxProfiles, list.Count - MaxProfiles);
             }
             return list;
         }

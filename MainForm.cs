@@ -9,6 +9,8 @@ public class MainForm : Form
     private const int HOTKEY_ID_PLAY = 4;   // 回放热键
     private const int MinMs = 50;
     private const int MaxMs = 5000;
+    private const int KeyStepMs = 50;        // 按键间隔的步进值（上下按钮/↑↓每次走 50ms）
+    private const int MouseStepMs = 100;     // 鼠标连点间隔步进
     private const int MouseMinMs = 100;      // 鼠标连点间隔下限
     private const int MouseMaxMs = 10000;    // 鼠标连点间隔上限（10 秒）
     private const int MouseDefaultMs = 300;  // 鼠标连点间隔默认值
@@ -1332,28 +1334,7 @@ public class MainForm : Form
 
     private void BuildKeysPage(Control page)
     {
-        var lblTitle = new Label
-        {
-            Text = "按键配置",
-            Location = new Point(16, 11),
-            AutoSize = true,
-            ForeColor = AntStyle.TextPri,
-            Font = new Font(AntStyle.FontName, 10.5f)
-        };
-        page.Controls.Add(lblTitle);
-
-        // 间隔范围说明跟着标题走（原来挤在右下角模式提示里）
-        var titleSize = RowTextSize("按键配置", 10.5f);
-        var rangeSize = RowTextSize($"间隔范围 {MinMs}-{MaxMs}ms，步进 1", 8f);
-        var lblRange = new Label
-        {
-            Text = $"间隔范围 {MinMs}-{MaxMs}ms，步进 1",
-            Location = new Point(16 + titleSize.Width + 12, 11 + (titleSize.Height - rangeSize.Height) / 2),
-            AutoSize = true,
-            ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
-        };
-        page.Controls.Add(lblRange);
+        AddPageTitle(page, "按键配置", $"间隔范围 {MinMs}-{MaxMs}ms，步进 {KeyStepMs}");
 
         pnlRows = new Panel
         {
@@ -1391,15 +1372,7 @@ public class MainForm : Form
     /// <summary>鼠标连点页：固定左/右/滚轮三行 + 停止条件下拉（松手停止 / 自动点击，默认松手停止）。</summary>
     private void BuildMousePage(Control page)
     {
-        var lblTitle = new Label
-        {
-            Text = "鼠标连点",
-            Location = new Point(16, 12),
-            AutoSize = true,
-            ForeColor = AntStyle.TextPri,
-            Font = new Font(AntStyle.FontName, 9.5f)
-        };
-        page.Controls.Add(lblTitle);
+        AddPageTitle(page, "鼠标连点", $"间隔范围 {MouseMinMs}-{MouseMaxMs}ms，步进 {MouseStepMs}");
 
         foreach (var (button, label, y) in new[] { ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120) })
         {
@@ -1423,7 +1396,7 @@ public class MainForm : Form
             {
                 Location = new Point(x, 3),
                 Size = new Size(84, 28),
-                Step = 100,
+                Step = MouseStepMs,
                 Min = MouseMinMs,
                 Max = MouseMaxMs
             };
@@ -1488,7 +1461,7 @@ public class MainForm : Form
 
         var lblHint = new Label
         {
-            Text = "开启后按住对应鼠标键即自动连点，松开即停；滚轮＝滚轮按下（中键）。间隔 100-10000ms，游戏内有效下限 40ms。",
+            Text = "开启后按住对应鼠标键即自动连点，松开即停；滚轮＝滚轮按下（中键）。",
             Location = new Point(16, 168),
             AutoSize = true,
             MaximumSize = new Size(RowWidth + 12, 0), // 超宽自动换行，不越过窗口右边缘
@@ -2298,7 +2271,7 @@ public class MainForm : Form
         {
             Location = new Point(184, 3),
             Size = new Size(84, 28),
-            Step = 10,
+            Step = KeyStepMs,
             Min = MinMs,
             Max = MaxMs
         };
@@ -2589,6 +2562,29 @@ public class MainForm : Form
             UpdateStatus("间隔已修正为 " + fixedMs + " 毫秒");
         }
         if (!_loading) SaveConfig(); // 手动输入的毫秒值离开输入框时落盘
+    }
+
+    /// <summary>页面标题 + 右侧间隔范围说明（按键页与鼠标页共用同一套字号与对齐）。</summary>
+    private static void AddPageTitle(Control page, string title, string range)
+    {
+        var titleSize = RowTextSize(title, 10.5f);
+        var rangeSize = RowTextSize(range, 8f);
+        page.Controls.Add(new Label
+        {
+            Text = title,
+            Location = new Point(16, 11),
+            AutoSize = true,
+            ForeColor = AntStyle.TextPri,
+            Font = new Font(AntStyle.FontName, 10.5f)
+        });
+        page.Controls.Add(new Label
+        {
+            Text = range,
+            Location = new Point(16 + titleSize.Width + 12, 11 + (titleSize.Height - rangeSize.Height) / 2),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 8f)
+        });
     }
 
     /// <summary>行内静态文字：保持 AutoSize（不裁切），用 MeasureText 把文字垂直中心对齐到 28px 控件带中线。</summary>

@@ -25,6 +25,12 @@ public class MouseClickConfig
 
 public class AppConfig
 {
+    /// <summary>
+    /// 配置结构版本＝写入时的程序版本。缺字段或低于当前版本 → 整份重置为默认（见 ConfigManager.Load）。
+    /// 不设初始值：STJ 反序列化时缺失的属性保留字段默认值，若给默认值就永远判不出"没有这个字段"。
+    /// </summary>
+    public string? ConfigVersion { get; set; }
+
     public List<KeyConfig> Keys { get; set; } = new();
     public List<MouseClickConfig> MouseClicks { get; set; } = new();
     public string StartHotkey { get; set; } = "F6";      // 按键连发热键
@@ -56,6 +62,10 @@ public static class ConfigManager
 {
     private static string ConfigPath => Path.Combine(AppPaths.DataDir, "config.json");
 
+    /// <summary>程序版本（形如 1.2.0），取自程序集版本，与 Tab 栏显示的版本号同源。</summary>
+    public static string AppVersion =>
+        typeof(AppConfig).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -66,11 +76,21 @@ public static class ConfigManager
     {
         try
         {
-            if (File.Exists(ConfigPath))
+            if (!File.Exists(ConfigPath)) return AppConfig.Default();
+
+            var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), JsonOptions);
+            if (cfg == null) return AppConfig.Default();
+
+            // 老配置没有版本字段，或版本低于当前程序 → 整份重置并立刻覆写：
+            // 结构变了以后逐字段兼容太容易漏，干脆从头来（配置项就这些，重填成本低）
+            if (!VersionMatches(cfg.ConfigVersion))
             {
-                var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), JsonOptions);
-                if (cfg != null) return cfg;
+                Logger.Info($"配置版本 {Describe(cfg.ConfigVersion)} 与当前 {AppVersion} 不符，已整体重置为默认配置");
+                var def = AppConfig.Default();
+                Save(def);
+                return def;
             }
+            return cfg;
         }
         catch (Exception ex)
         {
@@ -82,6 +102,14 @@ public static class ConfigManager
 
     public static void Save(AppConfig cfg)
     {
+        cfg.ConfigVersion = AppVersion; // 每次写盘都盖上当前版本，下次启动即按此判断
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(cfg, JsonOptions));
     }
+
+    /// <summary>版本字段必须存在，且不低于当前程序版本（缺字段 / 低于 = 需要重置）。</summary>
+    private static bool VersionMatches(string? version) =>
+        Version.TryParse(version, out var v) && v >= (Version.TryParse(AppVersion, out var app) ? app : new Version(0, 0, 0));
+
+    private static string Describe(string? version) =>
+        string.IsNullOrWhiteSpace(version) ? "(无配置版本字段)" : version;
 }

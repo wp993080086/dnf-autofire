@@ -680,6 +680,9 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 连发模式改名「保留原生 / 拦截原生」 | 下拉选项去掉 A/B 前缀，顺序按「保留原生、拦截原生」，默认仍是拦截原生（索引 1）；配置里的 `Mode` 仍写 `A`/`B`，映射改为 `index==0 → A` |
 | 说明文字跟随选项 | `lblModeTip` 改为 `ApplyKeyModeTip()` 动态生成：保留原生＝放行物理按键、拦截原生＝拦下物理按键 |
 | 间隔范围挪到标题行 + 标题加大 | 「按键配置」字号 9.5 → 10.5，后面接 8pt 灰字「间隔范围 50-5000ms，步进 1」，位置用 `RowTextSize` 实测宽度顺排，避免不同 DPI 下压字 |
+| 按键间隔步进 1 → 50 | `KeyStepMs = 50`；范围文案由常量拼出（`间隔范围 50-5000ms，步进 50`）。手输仍允许 1ms 粒度，只有上下按钮/↑↓ 按 50 走 |
+| 鼠标页标题与按键页统一 | 抽 `AddPageTitle(page, 标题, 范围文案)`，两页共用 10.5pt 标题 + 8pt 灰字；鼠标页范围用 `MouseMinMs/MouseMaxMs/MouseStepMs` 拼出「100-10000ms，步进 100」；页底提示删掉间隔范围与「游戏内有效下限 40ms」 |
+| 配置版本字段 `ConfigVersion` | 值＝写盘时的程序版本（`Assembly.GetName().Version.ToString(3)`）。`Load` 里**缺字段或低于当前版本 → `AppConfig.Default()` + 立即 `Save` 覆写**；旧 `PlayGapMs` 一并清除。踩坑：字段不能给初始值，否则 STJ 反序列化缺失属性时保留默认值，永远判不出"没有这个字段" |
 
 ---
 

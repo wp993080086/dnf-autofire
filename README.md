@@ -10,7 +10,7 @@
 
 - **多键连发配置**：最多 5 行按键配置（默认 X、A 两行），每行可独立设置
   - 键名（支持 `A-Z`、`0-9`，以及小键盘数字 `N0`–`N9`：在输入框里直接按小键盘即可）
-  - 触发间隔（毫秒，步进 1，范围 50–5000）
+  - 触发间隔（毫秒，步进 50，范围 50–5000）
   - 停止条件：**松手停止**（默认，按住才连发）/ **自动连按**（开启后无需按住，`0` 表示无限次，可设 1–100000 次）
   - 启用开关（Checkbox）：勾选了就必须填键名，空键名或两行同键会拒绝开启并提示
 - **鼠标连点**（v1.1.0 新增，v1.2.0 补充滚轮与自动点击）：左键 / 右键 / 滚轮（滚轮按下，即中键）三行，各自独立配置
@@ -91,6 +91,7 @@
 
 ```json
 {
+  "ConfigVersion": "1.2.0",
   "Keys": [
     { "Key": "X", "IntervalMs": 50, "StopMode": "hold", "StopValue": 0, "Enabled": true },
     { "Key": "A", "IntervalMs": 100, "StopMode": "auto", "StopValue": 200, "Enabled": false }
@@ -106,7 +107,7 @@
   "PlaybackHotkey": "F10",
   "PlayMode": "infinite",
   "PlayValue": 1,
-  "PlayGapMs": 1000,
+  "PlayGapSec": 1,
   "Mode": "B"
 }
 ```
@@ -116,6 +117,7 @@
 - `MouseClicks.StopMode`：`infinite`=松手停止（默认）/ `auto`=自动点击；`StopValue` 为自动点击的次数（`0` = 一直点，旧版 `count` 读入后按自动点击处理）
 - `PlayMode`：`count`=回放 N 次 / `infinite`=一直放 / `duration`=定时 N 分钟；`PlayValue` 为对应的次数或分钟数
 - `PlayGapSec`：两轮回放之间的等待秒数（`0` = 不等待，默认 `1`，上限 999999）
+- `ConfigVersion`：配置结构版本，等于写盘时的程序版本。**缺这个字段、或版本低于当前程序，整份配置直接重置为默认并立即覆写**（配置项不多，重填成本低于逐字段兼容）
 - 配置文件默认与 EXE 同目录；若 EXE 所在目录无写入权限，则使用 `%APPDATA%\DnfAutoFire\config.json`
 - 文件损坏时自动回退默认配置，并记录到 `error.log`
 

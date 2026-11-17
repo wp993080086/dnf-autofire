@@ -16,8 +16,9 @@ public static class Limits
     public const int MouseMsStep = 100;      // 鼠标连点间隔步进
     public const int MouseMsDefault = 300;   // 鼠标连点间隔默认值
 
-    public const int KeyCountMax = 100000;   // 自动连按次数上限（0 = 无限）
-    public const int MouseCountMax = 99999;  // 自动点击次数上限（0 = 无限）
+    // 自动连按 / 自动点击次数：0 = 无限，上限统一 99999（按键页与鼠标页一致）
+    public const int KeyCountMax = 99999;
+    public const int MouseCountMax = 99999;
 
     public const int KeyRowsMax = 5;         // 按键行上限
 

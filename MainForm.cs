@@ -682,21 +682,17 @@ public class MainForm : Form
     /// <summary>刷新主按钮与"当前控制"标识：跟随 Tab，且反映对应引擎的运行状态。</summary>
     private void RefreshRunCard()
     {
-        // 录制页的「开始/停止回放」按钮已经搬到页内（与开始录制并排），
-        // 底部这张卡只留「当前控制 + 状态」文字，不再重复一个同功能按钮
-        bool showMainButton = _tabIndex != TabRecord;
-        btnMain.Visible = showMainButton;
-        lblTarget.Top = showMainButton ? 50 : 28;
-        lblStatus.Top = showMainButton ? 70 : 54;
+        // 录制页在同一个位置放「开始录制 + 开始回放」两个按钮，其它 Tab 仍是单个主按钮
+        bool record = _tabIndex == TabRecord;
+        btnMain.Visible = !record;
+        btnRecord.Visible = record;
+        btnPlay.Visible = record;
 
         switch (_tabIndex)
         {
             case TabRecord:
-                lblTarget.Text = "当前控制：轨迹回放";
-                btnMain.Text = _player != null ? "停止回放" : "开始回放";
-                // 未选方案/录制中不可开始；回放中恒可停止
-                btnMain.Enabled = _player != null || (_recorder == null && SelectedProfile() != null);
-                btnMain.Danger = _player != null;
+                lblTarget.Text = "当前控制：录制回放";
+                SyncRecordButtons(); // 切到录制页时按当前状态刷一遍按钮
                 break;
 
             case TabMouse:
@@ -1053,8 +1049,10 @@ public class MainForm : Form
         pnlMain.Controls.Add(tabHeader);
         Controls.Add(pnlMain);
 
-        // 启动区（左下）：单按钮跟随当前 Tab——按键页控制连发、鼠标页控制连点
+        // 启动区（左下）：按键/鼠标页是一个主按钮；录制页换成「开始录制 / 开始回放」两个等宽按钮
         var pnlRun = new Panel { Location = new Point(2, 306), Size = new Size(294, 92), BackColor = Color.White };
+        const int RunBtnW = 114;              // (244 - 间距 16) / 2，两个按钮均分同一块宽度
+        const int RunBtnGap = 16;
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
@@ -1063,6 +1061,26 @@ public class MainForm : Form
             Size = new Size(244, 40),
             Font = new Font(AntStyle.FontName, 10f)
         };
+        btnRecord = new AntButton
+        {
+            Kind = AntButton.AntKind.Primary,
+            Text = "● 开始录制",
+            Location = new Point(14, 6),
+            Size = new Size(RunBtnW, 40),
+            Font = new Font(AntStyle.FontName, 10f),
+            Visible = false
+        };
+        btnRecord.Click += (_, _) => ToggleRecording();
+        btnPlay = new AntButton
+        {
+            Kind = AntButton.AntKind.Default,
+            Text = "▶ 开始回放",
+            Location = new Point(14 + RunBtnW + RunBtnGap, 6),
+            Size = new Size(RunBtnW, 40),
+            Font = new Font(AntStyle.FontName, 10f),
+            Visible = false
+        };
+        btnPlay.Click += (_, _) => TogglePlayback();
         lblTarget = new Label
         {
             Text = "当前控制：按键连发",
@@ -1079,6 +1097,8 @@ public class MainForm : Form
             ForeColor = AntStyle.TextTertiary
         };
         pnlRun.Controls.Add(btnMain);
+        pnlRun.Controls.Add(btnRecord);
+        pnlRun.Controls.Add(btnPlay);
         pnlRun.Controls.Add(lblTarget);
         pnlRun.Controls.Add(lblStatus);
         Controls.Add(pnlRun);
@@ -1535,32 +1555,10 @@ public class MainForm : Form
         pnlRecRows.Controls.Add(lblRecEmpty);
         lblRecEmpty.BringToFront();
 
-        // 录制与回放并排，等宽均分（间距 16）：两个动作同级，谁也不比谁落后半行
-        const int BtnGap = 16;
-        const int BtnW = (RowWidth - BtnGap) / 2;   // 264
-        const int BtnY = 164;
-        btnRecord = new AntButton
-        {
-            Kind = AntButton.AntKind.Primary,
-            Text = "● 开始录制",
-            Location = new Point(16, BtnY),
-            Size = new Size(BtnW, 30)
-        };
-        btnRecord.Click += (_, _) => ToggleRecording();
-        page.Controls.Add(btnRecord);
-
-        btnPlay = new AntButton
-        {
-            Kind = AntButton.AntKind.Default,
-            Text = "▶ 开始回放",
-            Location = new Point(16 + BtnW + BtnGap, BtnY),
-            Size = new Size(BtnW, 30)
-        };
-        btnPlay.Click += (_, _) => TogglePlayback();
-        page.Controls.Add(btnPlay);
+        // 录制/回放两个按钮在左下角的启动区里并排（见 BuildUi 的 pnlRun），页面内不再放按钮
 
         // 回放行：模式 + 数值 + 单位 + 间隔
-        const int PlayRowY = 200;
+        const int PlayRowY = 170;
         lblPlay = new Label
         {
             Text = "回放",
@@ -1634,12 +1632,21 @@ public class MainForm : Form
         // 这一行空闲时是操作提示，录制/回放时变成状态（录制中… / 回放第几次）
         lblRecStatus = new Label
         {
-            Location = new Point(16, 232),
+            Location = new Point(16, 202),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = new Font(AntStyle.FontName, 8f)
+        };
+        var lblRecHint = new Label
+        {
+            Text = "录制时主窗口收进托盘，右下角留状态条。",
+            Location = new Point(16, 222),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = new Font(AntStyle.FontName, 8f)
         };
         page.Controls.Add(lblRecStatus);
+        page.Controls.Add(lblRecHint);
     }
 
     /// <summary>回放模式收口：一直放＝隐藏数值框；其余按"次/分钟"给范围与单位。</summary>
@@ -1938,13 +1945,11 @@ public class MainForm : Form
         UpdateRecordUi();
     }
 
-    /// <summary>录制/回放状态与按钮文案、列表锁定统一在这里收口（所有入口都调它）。</summary>
-    private void UpdateRecordUi()
+    /// <summary>录制/回放两个按钮的文案与可用性（Tab 切换与状态变化都要刷新）。</summary>
+    private void SyncRecordButtons()
     {
         bool rec = _recorder != null;
         bool play = _player != null;
-        bool locked = rec || play;
-        bool canPlay = play || (!rec && SelectedProfile() != null);
 
         btnRecord.Text = rec ? "■ 停止录制" : "● 开始录制";
         btnRecord.Danger = rec;
@@ -1954,8 +1959,19 @@ public class MainForm : Form
         btnPlay.Text = play ? "■ 停止回放" : "▶ 开始回放";
         btnPlay.Kind = play ? AntButton.AntKind.Primary : AntButton.AntKind.Default;
         btnPlay.Danger = play;
-        btnPlay.Enabled = canPlay;
+        btnPlay.Enabled = play || (!rec && SelectedProfile() != null); // 未选方案/录制中不可开始
         btnPlay.Invalidate();
+    }
+
+    /// <summary>录制/回放状态与按钮文案、列表锁定统一在这里收口（所有入口都调它）。</summary>
+    private void UpdateRecordUi()
+    {
+        bool rec = _recorder != null;
+        bool play = _player != null;
+        bool locked = rec || play;
+        bool canPlay = play || (!rec && SelectedProfile() != null);
+
+        SyncRecordButtons();
 
         if (rec)
         {
@@ -2275,17 +2291,19 @@ public class MainForm : Form
         row.TxtKey = new AntInput
         {
             Location = new Point(58, 3),
-            Size = new Size(50, 28)
+            Size = new Size(52, 28)
         };
         row.TxtKey.Inner.MaxLength = 2;   // 单字符 A-Z/0-9；小键盘数字为 N0-N9 两字符
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
         row.TxtKey.Text = key;
 
-        // 与鼠标页同构：控件位置按实测文字宽度顺排（Label.AutoSize 挂到父控件后 Right 才有值）
-        int x = 58 + 50 + 4;
+        // 控件按实测文字宽度顺排，间距统一 6px（Label.AutoSize 挂到父控件后 Right 才有值）。
+        // 宽度都按内容给足：键 2 字符、间隔 4 位数、下拉「自动连按」、次数 5 位数；
+        // 「次」紧跟次数框，行尾留给「删除」，两者互不重叠。
+        int x = 58 + 52 + 6;
         var lblGap = MakeRowText("键，间隔", x);
-        x += RowTextWidth("键，间隔") + 4;
+        x += RowTextWidth("键，间隔") + 6;
         row.TxtMs = new AntNumber
         {
             Location = new Point(x, 3),
@@ -2295,15 +2313,15 @@ public class MainForm : Form
             Max = MaxMs
         };
         row.TxtMs.Text = ms.ToString();
-        x += 78 + 4;
+        x += 78 + 6;
         var lblMs = MakeRowText("毫秒，", x);
-        x += RowTextWidth("毫秒，") + 4;
-        row.SelStop = new AntSelect { Location = new Point(x, 2), Width = 92 };
-        row.SelStop.Inner.DropDownWidth = 92;
+        x += RowTextWidth("毫秒，") + 6;
+        row.SelStop = new AntSelect { Location = new Point(x, 2), Width = 84 };
+        row.SelStop.Inner.DropDownWidth = 84;
         row.SelStop.Inner.Items.Add("松手停止");
         row.SelStop.Inner.Items.Add("自动连按");
         row.SelStop.SelectedIndex = stopMode == "auto" ? 1 : 0; // 先定下拉框，事件尚未挂上
-        x += 92 + 4;
+        x += 84 + 6;
         row.NumCount = new AntNumber
         {
             Location = new Point(x, 3),
@@ -2314,16 +2332,15 @@ public class MainForm : Form
         };
         row.NumCount.Text = "0"; // 0 = 无限
         row.NumCount.Inner.MaxLength = 5;
-        x += 64 + 4;
+        x += 64 + 6;
         row.LblCount = MakeRowText("次", x); // 单位跟着次数框一起显隐
-        x += RowTextWidth("次") + 4;
         ApplyKeyStopMode(row, stopMode, stopValue); // 初始收口：松手停止时隐藏次数框
         row.LnkDel = new AntButton
         {
             Kind = AntButton.AntKind.Text,
             Danger = true,
             Text = "删除",
-            Location = new Point(Math.Min(x, RowWidth - 44), 3),
+            Location = new Point(RowWidth - 48, 3), // 固定在行尾右侧，各行的「删除」上下对齐
             Size = new Size(44, 26),
             Visible = false
         };

@@ -687,10 +687,10 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 合并的两个坑 | ① `JsonValueKind` 把 `true`/`false` 拆成 `True`、`False` 两个值，直接比 `GetValueKind()` 会把合法布尔值判成类型不符 → 加 `KindMatches` 专门放行布尔；② 默认值为 `null` 的字段（`ConfigVersion`）在骨架里是 `null`，需要单独走"沿用文件值"分支，否则每次加载都会把它丢掉并记一次"非法值回落" |
 | 旧字段 `PlayGapMs` → `PlayGapSec` | 合并前先跑 `MigrateLegacy`：文件里没有 `PlayGapSec` 但有 `PlayGapMs` 时换算成秒（`(ms+500)/1000`），日志留一条迁移记录 |
 | 自动点击次数框步进 | `Step` 1、默认 `1`、范围 `0–99999`（0 = 无限），数字框后补「次」单位；单位与次数框一起显隐（松手停止时都隐藏）。`Limits.MouseCountMax = 99999`，与按键连按（`Limits.KeyCountMax = 100000`）分开 |
-| 按键次数框与鼠标页对齐 | 按键行 `NumCount` 改成 `Step=1`、`Max=99999`（`Limits.KeyCountMax` 同步 100000 → 99999），框后加「次」`Label`（`RowControls.LblCount`），`ApplyKeyStopMode` 里与数值框一起显隐。行内控件改为按实测宽度顺排（`TxtKey` 50 / `TxtMs` 78 / `SelStop` 92 / `NumCount` 64），否则加「次」后「删除」会越出 544 行宽 |
-| 录制页两个按钮并排 | `btnPlay` 新增在页内：`BtnW = (RowWidth - 16) / 2 = 264`，`btnRecord` 在 16、`btnPlay` 在 16+264+16=296，同一 y=164。录制页底部卡片不再显示 `btnMain`（`RefreshRunCard` 里按 Tab 控制 `Visible`，标签上移补位），避免出现两个「开始回放」 |
-| 录制页标题统一 | 改用 `AddPageTitle(page, "鼠标录制回放", "最多 10 个方案，单次录制上限 10 分钟")`；列表下移到 y=38，回放设置行 y=200，页底一行 y=232 |
-| 录制页状态行复用 | `lblRecStatus` 挪到 y=232 当「状态/提示」两用：空闲显示 `RecordHint`（F9/F10 说明，8pt 灰），录制中红字「● 录制中…」，回放中由 `PlayTimer_Tick` 写进度（蓝字）。「共 N 个方案」「已选：方案X · 时长」文案与 `lblPlayInfo` / `DescribeSelection` 一并删除 |
+| 按键次数框与鼠标页对齐 | 按键行 `NumCount` 改成 `Step=1`、`Max=99999`（`Limits.KeyCountMax` 同步 100000 → 99999），框后加「次」`Label`（`RowControls.LblCount`），`ApplyKeyStopMode` 里与数值框一起显隐。行内控件改为按实测宽度顺排，间距统一 6px、宽度按内容给足（`TxtKey` 52 / `TxtMs` 78 / `SelStop` 84 / `NumCount` 64）；「次」紧跟次数框（x≈456），`LnkDel` 固定在 `RowWidth - 48 = 496`、各行上下对齐，两者互不重叠 |
+| 录制页两个按钮并排 | 两个按钮放进左下角启动区 `pnlRun`（不另起一行）：`RunBtnW = (244 - 16) / 2 = 114`，`btnRecord` 在 (14,6)、`btnPlay` 在 (144,6)，与 `btnMain` 同一块 244×40 区域。`RefreshRunCard` 按 Tab 切换 `Visible`：录制页显示这两枚、隐藏 `btnMain`；其它页反之。按钮文案/可用性收进 `SyncRecordButtons()`，`UpdateRecordUi` 与切页都会调 |
+| 录制页标题统一 | 改用 `AddPageTitle(page, "鼠标录制回放", "最多 10 个方案，单次录制上限 10 分钟")`；列表下移到 y=38，回放设置行 y=170（页内不再放按钮，整行上移），状态行 y=202 + 固定提示 y=222 |
+| 录制页状态行复用 | `lblRecStatus` 挪到 y=202 当「状态/提示」两用：空闲显示 `RecordHint`（F9/F10 说明，8pt 灰），录制中红字「● 录制中…」，回放中由 `PlayTimer_Tick` 写进度（蓝字）。「共 N 个方案」「已选：方案X · 时长」文案与 `lblPlayInfo` / `DescribeSelection` 一并删除 |
 | 方案行改名框与时长 | 名称框固定 `200×28`（`MaxLength=15`），时长文字 `RecordProfile.Summary` 改为「总时长 12.4s」放在 x=234，删除按钮位置 = `234 + RowTextWidth(Summary) + 12`，紧跟时长不再拉到行尾 |
 | 鼠标页底部说明拆三行 | 一个 `Label` 自动换行在窗口变窄时会折行数，改成三条独立 `Label`（y = 168 / 187 / 206，8pt 灰字）：松手停止 / 自动点击 / 滚轮＝滚轮按下（中键） |
 

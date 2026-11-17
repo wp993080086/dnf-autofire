@@ -27,6 +27,11 @@ internal static class NativeMethods
     public const uint LLMHF_LOWER_IL_INJECTED = 0x02;   // 低完整性进程注入
     public const uint LLMHF_ANY_INJECTED = LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED;
 
+    // 窗口扩展样式：回放状态条用（鼠标穿透 + 不进 Alt+Tab + 不抢焦点）
+    public const int WS_EX_TRANSPARENT = 0x00000020;
+    public const int WS_EX_TOOLWINDOW = 0x00000080;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
+
     // VK 鼠标键码（钩子事件统一用）
     public const int VK_LBUTTON = 0x01;
     public const int VK_RBUTTON = 0x02;
@@ -159,6 +164,12 @@ internal static class NativeMethods
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
     public const uint PW_RENDERFULLCONTENT = 0x00000002;
+
+    public const int GWL_EXSTYLE = -20;
+
+    /// <summary>读窗口扩展样式（调试入口用它确认穿透样式真的挂上了）。</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);

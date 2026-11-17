@@ -79,6 +79,7 @@ public class MainForm : Form
 
     // 回放
     private MacroPlayer? _player;
+    private PlayOverlayForm? _playOverlay;   // 回放期间的右下角状态条（只读、鼠标穿透）
     private AntSelect cboPlayMode = null!, cboPlayKey = null!;
     private AntNumber numPlayValue = null!, numPlayGap = null!;
     private Label lblPlay = null!, lblPlayUnit = null!, lblPlayInfo = null!;
@@ -125,7 +126,7 @@ public class MainForm : Form
         // 页面切换白幕淡入
         _fadeTimer = new System.Windows.Forms.Timer { Interval = 15 };
         _fadeTimer.Tick += Fade_Tick;
-        // 回放进度：200ms 刷新「第 N 轮 · mm:ss」
+        // 回放进度：200ms 刷新「第 N 次 · mm:ss」，同时驱动右下角状态条
         _playTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _playTimer.Tick += PlayTimer_Tick;
         _tabFont = new Font(AntStyle.FontName, 11f, FontStyle.Bold);
@@ -199,6 +200,7 @@ public class MainForm : Form
             _engine.Stop();
             _mouseEngine.Stop();
             _player?.Stop();
+            ClosePlayOverlay();
             UnregisterHotkeys();
             trayIcon.Visible = false;
             trayIcon.Dispose();
@@ -328,10 +330,10 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 调试入口：--playtest &lt;方案名&gt; &lt;值&gt; [count|infinite|duration] [最长秒数]。
+    /// 调试入口：--playtest &lt;方案名&gt; &lt;值&gt; [count|infinite|duration] [最长秒数] [截图路径]。
     /// 按指定模式开启回放，到点/跑完自动关闭退出（配 DNF_DRYRUN=1 只跑时间轴，不注入鼠标）。
     /// </summary>
-    internal void DebugPlayTest(string name, int value, string mode, int guardSeconds)
+    internal void DebugPlayTest(string name, int value, string mode, int guardSeconds, string? shotPath = null)
     {
         DebugShowTab(TabRecord);
         var profile = _profiles.FirstOrDefault(p => p.Name == name) ?? _profiles.FirstOrDefault();
@@ -350,6 +352,32 @@ public class MainForm : Form
         Logger.Info($"[playtest] 开始：{profile.Name} {profile.Points.Count} 点 模式={mode} 值={value} 光标={before.X},{before.Y}");
 
         StartPlayback();
+
+        // 等托盘气泡（2400ms）散掉再抓状态条，否则截到的是气泡
+        if (shotPath != null)
+        {
+            var shot = new System.Windows.Forms.Timer { Interval = 3000 };
+            shot.Tick += (_, _) =>
+            {
+                shot.Stop();
+                shot.Dispose();
+                var ov = _playOverlay;
+                if (ov == null || ov.IsDisposed)
+                {
+                    Logger.Info("[playtest] 状态条不存在");
+                    return;
+                }
+                var b = ov.Bounds;
+                using (var bmp = new Bitmap(b.Width, b.Height))
+                {
+                    // 不用 CopyFromScreen：测试进程常常拿不到桌面 DC，直接让窗口自己画
+                    ov.DrawToBitmap(bmp, new Rectangle(0, 0, b.Width, b.Height));
+                    bmp.Save(shotPath, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                Logger.Info($"[playtest] 状态条 {b} 第 {_player?.CurrentLoop ?? 0} 次 → {shotPath}");
+            };
+            shot.Start();
+        }
 
         // 兜底：到点无论是否跑完都停，避免测试挂住
         var guard = new System.Windows.Forms.Timer { Interval = Math.Max(3, guardSeconds) * 1000 };
@@ -1946,7 +1974,10 @@ public class MainForm : Form
 
     // ---------- 回放 ----------
 
-    /// <summary>回放进度：200ms 刷一次「第 N 轮 · mm:ss」，主窗口隐藏时也照常更新。</summary>
+    /// <summary>
+    /// 回放进度：200ms 刷一次「第 N 次 · mm:ss」，同时驱动右下角状态条。
+    /// 主窗口已收进托盘，这两处是用户唯一的进度来源。
+    /// </summary>
     private void PlayTimer_Tick(object? sender, EventArgs e)
     {
         var p = _player;
@@ -1955,10 +1986,13 @@ public class MainForm : Form
             _playTimer.Stop();
             return;
         }
+
+        int loop = Math.Max(1, p.CurrentLoop);
         lblRecStatus.Text = p.InjectBlocked
             ? "回放中 · 注入被系统拦截，请以管理员运行"
-            : $"回放中 {p.ProfileName} · 第 {Math.Max(1, p.Loop)} 轮 · {FormatDuration(p.ElapsedMs)}";
-        UpdateTrayText($"DNF 连发 · 回放 {p.ProfileName} 第 {Math.Max(1, p.Loop)} 轮 {FormatDuration(p.ElapsedMs)}");
+            : $"回放中 {p.ProfileName} · 第 {loop} 次 · {FormatDuration(p.ElapsedMs)}";
+        _playOverlay?.UpdateProgress(loop, p.ElapsedMs, p.InjectBlocked);
+        UpdateTrayText($"DNF 连发 · 回放 {p.ProfileName} 第 {loop} 次 {FormatDuration(p.ElapsedMs)}");
     }
 
     private void TogglePlayback()
@@ -2033,6 +2067,22 @@ public class MainForm : Form
         _playTimer.Start();
         UpdateRecordUi();
         RefreshRunCard();
+
+        // 与录制对称：窗口收进托盘后，右下角留一条状态条（方案名 / 第几次 / 计时）
+        try
+        {
+            _playOverlay = new PlayOverlayForm(profile.Name, mode == PlayMode.Count ? value : 0);
+            _playOverlay.Show();
+            _playOverlay.UpdateProgress(1, 0, false); // 首帧先给内容，别等第一个 200ms
+            Logger.Info($"回放状态条已显示：{_playOverlay.Bounds}");
+        }
+        catch (Exception ex)
+        {
+            // 状态条只是辅助展示，起不来不影响回放本身
+            Logger.Error("PlayOverlay", ex);
+            _playOverlay = null;
+        }
+
         Hide(); // 与连发一致：让游戏拿到焦点
 
         // 录制与当前虚拟桌面不一致时只提示、不阻止（换过分辨率/显示器的情况很常见）
@@ -2046,12 +2096,24 @@ public class MainForm : Form
             ToolTipIcon.Info);
     }
 
+    /// <summary>摘掉右下角状态条：手动停止、自然结束、退出程序都走这里。</summary>
+    private void ClosePlayOverlay()
+    {
+        var overlay = _playOverlay;
+        _playOverlay = null;
+        if (overlay == null) return;
+        try { overlay.CloseSilently(); }
+        catch (Exception ex) { Logger.Error("ClosePlayOverlay", ex); }
+        Logger.Info("回放状态条已关闭");
+    }
+
     private void StopPlayback()
     {
         var player = _player;
         if (player == null) return;
         _player = null;      // 先摘引用：Finished 回来时按"手动停止"处理
         _playTimer.Stop();
+        ClosePlayOverlay();
         player.Stop();       // 线程内补发抬起，避免卡键
         player.Dispose();
         UpdateRecordUi();
@@ -2067,6 +2129,7 @@ public class MainForm : Form
         var player = _player;
         _player = null;
         _playTimer.Stop();
+        ClosePlayOverlay();
         player.Dispose();
         UpdateRecordUi();
         RefreshRunCard();

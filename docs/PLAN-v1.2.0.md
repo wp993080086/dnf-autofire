@@ -482,6 +482,30 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 托盘退出时正在录制 | 数据丢失 | `ExitApp` 前先 `StopRecording(save: true)` |
 | 内存/文件异常 | 大方案写盘失败 | `try/catch` + `Logger.Error` + 状态栏红字提示，内存中的方案保留（可重试删除/重录） |
 
+### 7.7 回放状态条（追加需求：回放时也要看得见进度）
+
+录制有悬浮条，回放原本只有托盘悬停提示——主窗口一收进托盘，就完全看不出在放哪个方案、放到第几次。补一条与录制对称的**只读**状态条。
+
+```
+┌────────────────────────────────────────┐
+│ ● 回放中   方案A   第 2/5 次  00:03.0  │   217×44，贴工作区右下角（与录制条同一位）
+└────────────────────────────────────────┘
+```
+
+| 项 | 结论 |
+| --- | --- |
+| 内容 | 状态点（蓝，200ms 明暗） + `回放中` + 方案名 + `第 N/M 次`（一直放只有 `第 N 次`） + 已用时 `mm:ss.d` |
+| 位置 | 构造时即按 `Screen.PrimaryScreen.WorkingArea` 定位到右下角内缩 24px；**不靠 `OnShown`**，否则首帧会先在 (0,0) 闪一下 |
+| 交互 | **整条鼠标穿透**（`WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW`）：回放时鼠标是程序注入的，状态条若能点击，轨迹正好经过就会吞掉一次点击，命中按钮甚至会把回放停掉。因此不做拖动、不做 ■，停止只保留 `F10` 与托盘菜单 |
+| 刷新 | 复用主窗口已有的 200ms `_playTimer`（`UpdateProgress(轮次, 已用时, 是否被拦截)`），状态条自己不起定时器，与状态栏、托盘文案同源同帧 |
+| 宽度 | 按文本实测宽度（`TextRenderer` + `NoPadding`）自适应，变化时锚定右边缘向左长；注入被拦截时整条换成红字「注入被拦截 · 请以管理员身份运行」 |
+| 轮次口径 | `MacroPlayer` 新增 `CurrentLoop`（第 1 次进行中 = 1）；旧的 `Loop` 是"已完成次数"，第一轮进行中为 0，直接拿来显示会差一位，且轮间隔里会显示成上一轮次 |
+| 生命周期 | `StartPlayback` 成功后在 `Hide()` 之后创建并 `Show()`；手动停止（`StopPlayback`）、自然结束（`OnPlaybackFinished`）、退出程序（`FormClosed`）统一走 `ClosePlayOverlay()` |
+| 失败降级 | 状态条构造/显示异常只记 `Logger.Error("PlayOverlay")` 并置空，**不影响回放本身** |
+
+验证：`--playoverlaytest <png>` 离屏出图并打印 `ExStyle`（确认 `WS_EX_TRANSPARENT` 真的挂上）；`--playtest … <png>` 在回放进行到第 2 次时抓真实状态条。
+
+
 ---
 
 ## 8. 热键与全局开关
@@ -666,5 +690,6 @@ MacroPlayer.Start(profile, repeatMode, value)
 | `NativeMethods` | ✅ 已完成 | 中键常量、`WM_MOUSEMOVE`、`MOUSEEVENTF_MOVE/ABSOLUTE/VIRTUALDESK`、`GetSystemMetrics` |
 | `NativeInput.SendMouseButton` / `SendMouseMoveAbsolute` | ✅ 已完成 | 改为 `(int vk, bool up)` 与绝对定位，返回 bool 以暴露注入失败 |
 | `RecordStore` / `MacroRecorder` / `MacroPlayer` / `RecordOverlayForm` | ✅ 已完成 | 方案存储、录制、回放、录制悬浮条 |
-| `Program.cs` | ✅ 已完成 | `--screenshot`（含 `mouse`/`record`）、`--uitest`、`--keytest`、`--recordtest`、`--playtest`、`--movetest`、`--mouselayout`、`--mousetest` |
+| `PlayOverlayForm` / `MacroPlayer.CurrentLoop` | ✅ 已完成 | 回放状态条（穿透只读）+ 当前第几次 |
+| `Program.cs` | ✅ 已完成 | `--screenshot`（含 `mouse`/`record`）、`--uitest`、`--keytest`、`--recordtest`、`--playtest`（含状态条截图）、`--playoverlaytest`、`--movetest`、`--mouselayout`、`--mousetest` |
 

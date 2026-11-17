@@ -54,7 +54,7 @@ internal static class Program
             return;
         }
 
-        // 调试用：dnf-autofire --playtest <方案名> <值> [count|infinite|duration] [最长秒数]
+        // 调试用：dnf-autofire --playtest <方案名> <值> [count|infinite|duration] [最长秒数] [截图路径]
         // 按指定模式回放，到点/跑完即退出（配 DNF_DRYRUN=1 只跑时间轴不注入鼠标）
         if (args.Length >= 4 && args[1] == "--playtest")
         {
@@ -64,7 +64,8 @@ internal static class Program
                 args[2],
                 int.TryParse(args[3], out int pv) ? pv : 1,
                 args.Length >= 5 ? args[4] : "count",
-                args.Length >= 6 && int.TryParse(args[5], out int pg) ? pg : 30);
+                args.Length >= 6 && int.TryParse(args[5], out int pg) ? pg : 30,
+                args.Length >= 7 ? args[6] : null);
             Application.Run(form);
             return;
         }
@@ -200,6 +201,28 @@ internal static class Program
             Application.DoEvents();
             Console.WriteLine(ktForm.DebugStartCheck());
             ktForm.Close();
+            return;
+        }
+
+        // 调试用：dnf-autofire --playoverlaytest <png> [第几次] [总次数] 离屏渲染回放状态条并截图
+        if (args.Length >= 3 && args[1] == "--playoverlaytest")
+        {
+            int loop = args.Length >= 4 && int.TryParse(args[3], out int lp) ? lp : 2;
+            int total = args.Length >= 5 && int.TryParse(args[4], out int tot) ? tot : 5;
+            using var ov = new PlayOverlayForm("方案A", total);
+            ov.Show();
+            ov.Location = new Point(-3000, -3000); // 摆到屏幕外，别挡住桌面
+            ov.UpdateProgress(loop, 125400, false);
+            Application.DoEvents();
+            Thread.Sleep(250);
+            Application.DoEvents();
+            using var bmp = new Bitmap(ov.Width, ov.Height);
+            ov.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+            bmp.Save(args[2], ImageFormat.Png);
+            int ex = NativeMethods.GetWindowLong(ov.Handle, NativeMethods.GWL_EXSTYLE);
+            Logger.Info($"[playoverlaytest] {ov.Width}x{ov.Height} loop={loop}/{total} "
+                + $"ExStyle=0x{ex:X} 穿透={(ex & NativeMethods.WS_EX_TRANSPARENT) != 0} → {args[2]}");
+            ov.Close();
             return;
         }
 

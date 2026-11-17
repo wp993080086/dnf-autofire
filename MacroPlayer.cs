@@ -41,6 +41,7 @@ internal sealed class MacroPlayer : IDisposable
     private PlayMode _mode;
     private int _value;   // Count=次数，Duration=分钟，Infinite 忽略
     private int _loop;
+    private int _current; // 正在进行（或刚放完）的是第几次，第 1 次进行中 = 1
     private int _sent;
     private int _gapMs = DefaultGapMs;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
     private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
@@ -52,6 +53,9 @@ internal sealed class MacroPlayer : IDisposable
 
     /// <summary>已完成轮数（第一轮进行中为 0）。</summary>
     public int Loop => Volatile.Read(ref _loop);
+
+    /// <summary>正在进行的是第几次（从 1 起，轮间隔里仍是刚放完的那一次）。状态条按它显示更准。</summary>
+    public int CurrentLoop => Volatile.Read(ref _current);
 
     public long ElapsedMs => _sw.ElapsedMilliseconds;
 
@@ -77,6 +81,7 @@ internal sealed class MacroPlayer : IDisposable
         _value = Math.Max(1, value);
         _gapMs = Math.Clamp(gapMs, 0, MaxGapMs);
         _loop = 0;
+        _current = 0;
         _sent = 0;
         _stop = false;
         _running = true;
@@ -117,6 +122,7 @@ internal sealed class MacroPlayer : IDisposable
         {
             while (!_stop)
             {
+                Volatile.Write(ref _current, loops + 1);
                 int loopStart = (int)_sw.ElapsedMilliseconds;
                 PlayOnce(profile, loopStart, totalMs);
 

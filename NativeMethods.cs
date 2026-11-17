@@ -6,6 +6,9 @@ internal static class NativeMethods
 {
     public const int WH_KEYBOARD_LL = 13;
     public const int WH_MOUSE_LL = 14;
+    public const int WM_CLOSE = 0x0010;   // 关闭消息（调试用）
+    public const int WM_SYSCOMMAND = 0x0112; // 系统命令：点标题栏 X / Alt+F4 都是 SC_CLOSE
+    public const int SC_CLOSE = 0xF060;
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_KEYUP = 0x0101;
     public const int WM_SYSKEYDOWN = 0x0104;
@@ -159,6 +162,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 }
 
 /// <summary>通过 SendInput 发送键盘事件（使用扫描码，兼容性最好）。</summary>

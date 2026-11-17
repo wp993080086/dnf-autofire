@@ -203,6 +203,82 @@ internal static class Program
             return;
         }
 
+        // 调试用：dnf-autofire --closetest <png> [busy] 渲染「关闭还是最小化」询问框并截图
+        if (args.Length >= 3 && args[1] == "--closetest")
+        {
+            using var dlg = new ClosePromptForm(args.Length >= 4 && args[3] == "busy");
+            dlg.StartPosition = FormStartPosition.Manual;
+            dlg.Location = new Point(-3000, -3000);
+            dlg.Show();
+            Application.DoEvents();
+            Thread.Sleep(250);
+            Application.DoEvents();
+            using var bmp = new Bitmap(dlg.Width, dlg.Height);
+            dlg.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+            bmp.Save(args[2], ImageFormat.Png);
+            dlg.Close();
+            return;
+        }
+
+        // 调试用：dnf-autofire --xclosetest <prefix> 模拟点 X：询问框出现 → 选「最小化」→ 再点 X → 选「退出」
+        if (args.Length >= 3 && args[1] == "--xclosetest")
+        {
+            var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };
+            form.Show();
+            Logger.Info("[xclosetest] 窗口已显示，开始计时");
+
+            int step = 0;
+            var t = new System.Windows.Forms.Timer { Interval = 500 };
+            t.Tick += (_, _) =>
+            {
+                step++;
+                var dlg = Application.OpenForms.OfType<ClosePromptForm>().FirstOrDefault();
+                switch (step)
+                {
+                    case 1:
+                        NativeMethods.PostMessage(form.Handle, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_CLOSE, IntPtr.Zero); // 等于用户点 X
+                        return;
+                    case 2:
+                        Logger.Info($"[xclosetest] 第一次点 X：询问框={(dlg == null ? "未出现" : "已出现")}");
+                        if (dlg == null) return;
+                        using (var bmp = new Bitmap(dlg.Width, dlg.Height))
+                        {
+                            dlg.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+                            bmp.Save(args[2] + "_prompt.png", ImageFormat.Png);
+                        }
+                        dlg.ChooseForTest(ClosePromptForm.Choice.Minimize);
+                        return;
+                    case 3:
+                        Logger.Info($"[xclosetest] 选最小化后：Visible={form.Visible} Disposed={form.IsDisposed}");
+                        form.Show();
+                        form.WindowState = FormWindowState.Normal;
+                        NativeMethods.PostMessage(form.Handle, NativeMethods.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_CLOSE, IntPtr.Zero); // 等于用户点 X
+                        return;
+                    case 4:
+                        Logger.Info($"[xclosetest] 第二次点 X：询问框={(dlg == null ? "未出现" : "已出现")}");
+                        dlg?.ChooseForTest(ClosePromptForm.Choice.Exit);
+                        return;
+                }
+                t.Stop();
+                Logger.Info("[xclosetest] 未走到退出分支，强制结束");
+                Application.Exit();
+            };
+            t.Start();
+
+            var guard = new System.Windows.Forms.Timer { Interval = 12000 };
+            guard.Tick += (_, _) =>
+            {
+                guard.Stop();
+                Logger.Info("[xclosetest] 超时兜底退出");
+                Application.Exit();
+            };
+            guard.Start();
+
+            Application.Run(form);
+            Logger.Info($"[xclosetest] 消息循环结束：Disposed={form.IsDisposed}（true=选「退出」生效）");
+            return;
+        }
+
         // 单实例保护：双开会导致热键冲突与双重连发
         using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
         if (!createdNew)

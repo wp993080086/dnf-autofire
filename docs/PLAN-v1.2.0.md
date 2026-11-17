@@ -572,6 +572,8 @@ MacroPlayer.Start(profile, repeatMode, value)
 
 > 实际落地与计划的差异：窗口没有加高到 470 —— 三行鼠标配置 + 提示在原有 400 高度里排得下（`RecListHeight=120` 正好 4 行），所以只调整了页面内坐标；录制页的回放设置压在录制行下方一行（模式 / 数值 / 已选方案），底部提示拆两行。
 >
+> 发版前追加的两项（原计划没有）：① **回放间隔** —— 两轮之间的等待，默认 1000ms、0–999999、步进 1，存在 `PlayGapMs`，由 `MacroPlayer.Start(profile, mode, value, gapMs)` 传入；② **关闭确认** —— 点 X 走 `WM_SYSCOMMAND + SC_CLOSE` 拦截（不是 FormClosing，因为程序自己 `Close()` 与用户点 X 的 CloseReason 并不可靠），弹 `ClosePromptForm` 二选一，选最小化则 `Hide()`。
+>
 > 回放的两点实现取舍：① 插值只针对「移动→移动」相邻点（点击前若坐标不符只补一次定位，不做插值，避免点击被延后）；② 定时模式按绝对时间判断，允许在半轮处截断（不补齐当前轮）。
 
 ---

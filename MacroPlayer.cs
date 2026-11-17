@@ -16,11 +16,13 @@ internal enum PlayMode { Count, Infinite, Duration }
 /// - 相邻两次移动间隔 &gt;32ms 且位移 &gt;4px 时按 16ms 步长插值：游戏按帧轮询光标，
 ///   直接瞬移可能整段跳过，插值后至少每帧有一个位置。
 /// - 按下/抬起间隔 &lt;20ms 时补到 20ms（与连发引擎同一个下限结论：一帧 60fps≈16.7ms）。
+/// - 轮与轮之间按「回放间隔」等待（默认 1000ms，可设 0 = 轮尾直接接轮头）。
 /// - 停止时补发所有处于按下状态的键，避免"回放停在按住那一帧"导致卡键。
 /// </summary>
 internal sealed class MacroPlayer : IDisposable
 {
-    public const int LoopGapMs = 300;     // 轮与轮之间留一点空隙，避免尾巴贴着头
+    public const int DefaultGapMs = 1000;  // 回放间隔默认 1 秒
+    public const int MaxGapMs = 999999;    // 回放间隔上限（约 16.7 分钟）
     private const int MinHoldMs = 20;     // 按下保持下限
     private const int InterpGapMs = 32;   // 相邻移动间隔超过它才插值
     private const int InterpStepMs = 16;  // 插值步长（对齐 60fps 轮询）
@@ -40,6 +42,7 @@ internal sealed class MacroPlayer : IDisposable
     private int _value;   // Count=次数，Duration=分钟，Infinite 忽略
     private int _loop;
     private int _sent;
+    private int _gapMs = DefaultGapMs;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
     private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
 
     public bool Running => _running;
@@ -66,12 +69,13 @@ internal sealed class MacroPlayer : IDisposable
     [DllImport("winmm.dll")]
     private static extern uint timeEndPeriod(uint ms);
 
-    public void Start(RecordProfile profile, PlayMode mode, int value)
+    public void Start(RecordProfile profile, PlayMode mode, int value, int gapMs = DefaultGapMs)
     {
         Stop();
         _profile = profile;
         _mode = mode;
         _value = Math.Max(1, value);
+        _gapMs = Math.Clamp(gapMs, 0, MaxGapMs);
         _loop = 0;
         _sent = 0;
         _stop = false;
@@ -126,11 +130,11 @@ internal sealed class MacroPlayer : IDisposable
                 if (_mode == PlayMode.Duration)
                 {
                     if (now >= totalMs) break;
-                    WaitUntil(Math.Min(now + LoopGapMs, totalMs));
+                    WaitUntil(Math.Min(now + _gapMs, totalMs));
                 }
                 else
                 {
-                    WaitUntil(now + LoopGapMs);
+                    WaitUntil(now + _gapMs);
                 }
             }
         }

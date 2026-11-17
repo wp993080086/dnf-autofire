@@ -80,8 +80,9 @@ public class MainForm : Form
     // 回放
     private MacroPlayer? _player;
     private AntSelect cboPlayMode = null!, cboPlayKey = null!;
-    private AntNumber numPlayValue = null!;
+    private AntNumber numPlayValue = null!, numPlayGap = null!;
     private Label lblPlay = null!, lblPlayUnit = null!, lblPlayInfo = null!;
+    private Label lblGap = null!, lblGapUnit = null!;
     private readonly System.Windows.Forms.Timer _playTimer; // 回放进度 200ms 刷新
 
     private AntButton btnMain = null!;      // 唯一主按钮：控制当前 Tab 对应的引擎
@@ -685,14 +686,41 @@ public class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // 运行中点 X → 隐藏到托盘，不退出（任一引擎在跑都一样）
-        if (!_exiting && (_engine.Running || _mouseEngine.Running || _player != null))
-        {
-            e.Cancel = true;
-            Hide();
-            return;
-        }
+        // 用户点 X 已在 WndProc 的 SC_CLOSE 分支里拦下并问过一遍；
+        // 走到这里的是程序自身关窗（退出流程）或系统关机，直接放行。
         base.OnFormClosing(e);
+    }
+
+    /// <summary>用户点了标题栏 X / 系统菜单关闭 / Alt+F4：问一句再决定关还是收进托盘。</summary>
+    private void HandleUserCloseRequest()
+    {
+        switch (AskCloseAction())
+        {
+            case ClosePromptForm.Choice.Exit:
+                ExitApp();
+                break;
+            case ClosePromptForm.Choice.Minimize:
+                HideToTray();
+                break;
+        }
+    }
+
+    /// <summary>弹出关闭询问框，返回用户选择（None=取消，保持窗口）。</summary>
+    private ClosePromptForm.Choice AskCloseAction()
+    {
+        bool busy = _engine.Running || _mouseEngine.Running || _recorder != null || _player != null;
+        using var dlg = new ClosePromptForm(busy);
+        dlg.ShowDialog(this);
+        return dlg.Result;
+    }
+
+    /// <summary>最小化到托盘：窗口隐藏、程序继续跑（连发/连点/录制回放都不中断）。</summary>
+    private void HideToTray()
+    {
+        Hide();
+        if (_engine.Running || _mouseEngine.Running || _recorder != null || _player != null)
+            trayIcon.ShowBalloonTip(1600, "DNF 连发",
+                "仍在后台运行，双击托盘图标可重新打开。", ToolTipIcon.Info);
     }
 
     /// <summary>主窗口隐藏（最小化到托盘）时立刻收起白幕，避免屏幕上残留一块白色浮层。</summary>
@@ -715,6 +743,16 @@ public class MainForm : Form
 
     protected override void WndProc(ref Message m)
     {
+        // 点标题栏 X（以及系统菜单关闭、Alt+F4）都是 WM_SYSCOMMAND + SC_CLOSE：
+        // 在这里拦下先问「最小化还是退出」，不交给默认处理，所以窗口不会直接关掉。
+        if (m.Msg == NativeMethods.WM_SYSCOMMAND
+            && (m.WParam.ToInt64() & 0xFFF0) == NativeMethods.SC_CLOSE
+            && !_exiting)
+        {
+            HandleUserCloseRequest();
+            return;
+        }
+
         base.WndProc(ref m);
         if (m.Msg == WM_HOTKEY)
         {
@@ -751,6 +789,7 @@ public class MainForm : Form
             PlaybackHotkey = _tabIndex == TabRecord ? cboPlayKey.Text : _config.PlaybackHotkey,
             PlayMode = PlayModeKey(),
             PlayValue = Math.Max(1, numPlayValue.Value),
+            PlayGapMs = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapMs),
             Mode = cboMode.SelectedIndex == 0 ? "B" : "A",
             Keys = _rows.Select(r => new KeyConfig
             {
@@ -829,6 +868,7 @@ public class MainForm : Form
         cboPlayMode.SelectedIndex = playMode == "count" ? 0 : playMode == "duration" ? 2 : 1;
         numPlayValue.Max = playMode == "duration" ? 600 : 9999;
         numPlayValue.SetValue(Math.Clamp(_config.PlayValue, 1, numPlayValue.Max));
+        numPlayGap.SetValue(Math.Clamp(_config.PlayGapMs, 0, MacroPlayer.MaxGapMs));
         ApplyPlayMode();
 
         SetKeysUiLocked(_engine.Running);
@@ -1488,21 +1528,52 @@ public class MainForm : Form
             AutoSize = true,
             ForeColor = AntStyle.TextSec
         };
+
+        // 回放间隔：两轮之间等多久（默认 1000ms = 1 秒，0 = 轮尾直接接轮头）
+        lblGap = new Label
+        {
+            Text = "间隔",
+            Location = new Point(300, RecListHeight + 74),
+            AutoSize = true,
+            ForeColor = AntStyle.TextSec
+        };
+        numPlayGap = new AntNumber
+        {
+            Location = new Point(332, RecListHeight + 67),
+            Size = new Size(84, 28),
+            Step = 1,
+            Min = 0,
+            Max = MacroPlayer.MaxGapMs
+        };
+        numPlayGap.Text = MacroPlayer.DefaultGapMs.ToString();
+        numPlayGap.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
+        lblGapUnit = new Label
+        {
+            Text = "毫秒",
+            Location = new Point(420, RecListHeight + 74),
+            AutoSize = true,
+            ForeColor = AntStyle.TextSec
+        };
+
+        // 已选方案信息：回放行让位给「间隔」后挪到录制按钮同一行
         lblPlayInfo = new Label
         {
             Text = "未选方案",
-            Location = new Point(304, RecListHeight + 74),
+            Location = new Point(300, RecListHeight + 40),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary
         };
 
-        page.Controls.AddRange(new Control[] { lblPlay, cboPlayMode, numPlayValue, lblPlayUnit, lblPlayInfo });
+        page.Controls.AddRange(new Control[]
+        {
+            lblPlay, cboPlayMode, numPlayValue, lblPlayUnit, lblGap, numPlayGap, lblGapUnit, lblPlayInfo
+        });
         ApplyPlayMode(); // 初始收口：默认"一直放"隐藏数值框
 
         var lblHint = new Label
         {
             Text = $"录制时主窗口收进托盘，右下角留状态条（可拖动）；上限 {MacroRecorder.MaxDurationMs / 60000} 分钟 / {MacroRecorder.MaxPoints} 点。\r\n" +
-                   $"F9 开始/结束录制，F10 开始/停止回放；回放期间请把游戏切到前台。",
+                   $"F9 开始/结束录制，F10 开始/停止回放（回放时把游戏切到前台）；间隔＝两轮之间的等待，0 为不等待。",
             Location = new Point(16, RecListHeight + 104),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
@@ -1520,8 +1591,10 @@ public class MainForm : Form
         numPlayValue.Visible = !infinite;
         lblPlayUnit.Visible = !infinite;
         lblPlayUnit.Text = timed ? "分钟" : "次";
-        // 数值框隐藏时把"已选"左移，避免中间空一大块
-        lblPlayInfo.Left = infinite ? 180 : 304;
+        // 一直放没有数值框：把「间隔」整组左移，避免中间空一大块
+        lblGap.Left = infinite ? 184 : 300;
+        numPlayGap.Left = infinite ? 216 : 332;
+        lblGapUnit.Left = infinite ? 304 : 420;
 
         if (infinite) return;
         numPlayValue.Min = 1;
@@ -1816,6 +1889,7 @@ public class MainForm : Form
 
         cboPlayMode.Enabled = !locked;
         numPlayValue.Enabled = !locked && cboPlayMode.SelectedIndex != 1;
+        numPlayGap.Enabled = !locked;
         lblPlayInfo.Text = DescribeSelection();
 
         if (trayRecordItem != null)
@@ -1928,6 +2002,7 @@ public class MainForm : Form
             _ => PlayMode.Infinite
         };
         int value = mode == PlayMode.Infinite ? 0 : Math.Max(1, numPlayValue.Value);
+        int gap = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapMs);
 
         var player = new MacroPlayer();
         _player = player;
@@ -1941,7 +2016,7 @@ public class MainForm : Form
 
         try
         {
-            player.Start(profile, mode, value);
+            player.Start(profile, mode, value, gap);
         }
         catch (Exception ex)
         {
@@ -1954,7 +2029,7 @@ public class MainForm : Form
             return;
         }
 
-        Logger.Info($"开始回放：{profile.Name} {DescribePlayMode(mode, value)}");
+        Logger.Info($"开始回放：{profile.Name} {DescribePlayMode(mode, value)} 间隔 {gap}ms");
         _playTimer.Start();
         UpdateRecordUi();
         RefreshRunCard();

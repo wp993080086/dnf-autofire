@@ -34,6 +34,7 @@ internal sealed class AutoFireEngine
     private KeyboardHook? _hook;
     private Thread? _worker;
     private volatile bool _stop;
+    private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
     // 测试用：设置环境变量 DNF_DRYRUN=1 时不真正注入按键，只跑调度计数
     internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
@@ -81,7 +82,11 @@ internal sealed class AutoFireEngine
         _hook.KeyUp += OnKeyUp;
 
         _stop = false;
-        timeBeginPeriod(1); // 把系统计时精度提到 1ms，Sleep(1) 才真正约 1ms
+        if (!_periodRaised)
+        {
+            timeBeginPeriod(1); // 把系统计时精度提到 1ms，Sleep(1) 才真正约 1ms
+            _periodRaised = true;
+        }
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "AutoFireEngine" };
         _worker.Start();
         _hook.Install();
@@ -93,7 +98,11 @@ internal sealed class AutoFireEngine
         _stop = true;
         try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
-        timeEndPeriod(1);
+        if (_periodRaised)
+        {
+            timeEndPeriod(1);
+            _periodRaised = false;
+        }
         // 释放仍处于"模拟按下"状态的键，避免卡键
         foreach (var k in _keys)
         {

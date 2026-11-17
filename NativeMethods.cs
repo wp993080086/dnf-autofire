@@ -6,7 +6,6 @@ internal static class NativeMethods
 {
     public const int WH_KEYBOARD_LL = 13;
     public const int WH_MOUSE_LL = 14;
-    public const int WM_CLOSE = 0x0010;   // 关闭消息（调试用）
     public const int WM_SYSCOMMAND = 0x0112; // 系统命令：点标题栏 X / Alt+F4 都是 SC_CLOSE
     public const int SC_CLOSE = 0xF060;
     public const int WM_KEYDOWN = 0x0100;
@@ -228,13 +227,6 @@ internal static class NativeInput
         NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
-    /// <summary>发送一次 press + release（零间隔，适合消息层消费；游戏内请用带保持时长的引擎调度）。</summary>
-    public static void TapKey(int vk)
-    {
-        SendKey(vk, up: false);
-        SendKey(vk, up: true);
-    }
-
     /// <summary>
     /// 发送鼠标按下/抬起事件（button 为 VK_LBUTTON / VK_RBUTTON / VK_MBUTTON；up=true 抬起）。
     /// 位置为当前光标处。返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。
@@ -267,14 +259,16 @@ internal static class NativeInput
         NativeMethods.GetSystemMetrics(NativeMethods.SM_CXVIRTUALSCREEN),
         NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN));
 
+    public static bool SendMouseMoveAbsolute(int x, int y) => SendMouseMoveAbsolute(x, y, VirtualScreen());
+
     /// <summary>
     /// 绝对定位光标：把物理像素坐标归一化到虚拟桌面（0–65535）。
     /// 不用 SetCursorPos——它不产生标准输入事件，且不同 DPI 感知下语义不一致。
+    /// 虚拟桌面范围由调用方缓存后传入：回放时每个点都要定位，逐点再查四次系统度量没有意义。
     /// 返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。
     /// </summary>
-    public static bool SendMouseMoveAbsolute(int x, int y)
+    public static bool SendMouseMoveAbsolute(int x, int y, Rectangle v)
     {
-        var v = VirtualScreen();
         int vw = Math.Max(2, v.Width), vh = Math.Max(2, v.Height);
         int nx = (int)Math.Round((x - v.X) * 65535.0 / (vw - 1));
         int ny = (int)Math.Round((y - v.Y) * 65535.0 / (vh - 1));

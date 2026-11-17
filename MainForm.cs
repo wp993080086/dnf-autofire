@@ -21,7 +21,7 @@ public class MainForm : Form
     private const int MaxMouseRepeat = Limits.MouseCountMax; // 自动点击次数上限（0 = 无限）
     private const int RowH = 34;
     private const int RowWidth = 584;   // 配置行宽度（与鼠标页对齐），按键页内容区同宽
-    private const int MaxRows = 5;  // 最多 5 行（默认 2 + 新增 3）
+    private const int MaxRows = Limits.KeyRowsMax;  // 最多 5 行（默认 2 + 新增 3）
     private const int RecRowH = 30;        // 录制方案列表行高
     private const int RecListHeight = 120; // 方案列表可视高度（正好 4 行，超出滚动，不留半行）
     // 录制页底部那行：空闲时是操作提示，录制/回放时被状态文案顶替
@@ -119,7 +119,7 @@ public class MainForm : Form
                    ?? SystemIcons.Application;
         Icon = _appIcon;
 
-        Font = new Font(AntStyle.FontName, 9f);
+        Font = AntStyle.GetFont(9f);
         Text = "DNF 连发工具";
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -1103,7 +1103,7 @@ public class MainForm : Form
         // 回放设置：模式 + 次数/分钟
         string playMode = _config.PlayMode is "count" or "duration" ? _config.PlayMode : "infinite";
         cboPlayMode.SelectedIndex = playMode == "count" ? 0 : playMode == "duration" ? 2 : 1;
-        numPlayValue.Max = playMode == "duration" ? 600 : 9999;
+        numPlayValue.Max = playMode == "duration" ? Limits.PlayMinuteMax : Limits.PlayCountMax;
         numPlayValue.SetValue(Math.Clamp(_config.PlayValue, 1, numPlayValue.Max));
         numPlayGap.SetValue(Math.Clamp(_config.PlayGapSec, 0, MacroPlayer.MaxGapSec));
         ApplyPlayMode();
@@ -1196,7 +1196,7 @@ public class MainForm : Form
             Text = $"v{Application.ProductVersion.Split('+')[0]} · 鹏多多",
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f),
+            Font = AntStyle.GetFont(8f),
             BackColor = Color.Transparent,
             Enabled = false // 纯展示，不响应鼠标（事件穿透到 tabHeader）
         };
@@ -1235,7 +1235,7 @@ public class MainForm : Form
             Text = "开启连发",
             Location = new Point(14, 6),
             Size = new Size(366, 40),
-            Font = new Font(AntStyle.FontName, 10f)
+            Font = AntStyle.GetFont(10f)
         };
         btnRecord = new AntButton
         {
@@ -1243,7 +1243,7 @@ public class MainForm : Form
             Text = "● 开始录制",
             Location = new Point(14, 6),
             Size = new Size(RunBtnW, 40),
-            Font = new Font(AntStyle.FontName, 10f),
+            Font = AntStyle.GetFont(10f),
             Visible = false
         };
         btnRecord.Click += (_, _) => ToggleRecording();
@@ -1253,7 +1253,7 @@ public class MainForm : Form
             Text = "▶ 开始回放",
             Location = new Point(14 + RunBtnW + RunBtnGap, 6),
             Size = new Size(RunBtnW, 40),
-            Font = new Font(AntStyle.FontName, 10f),
+            Font = AntStyle.GetFont(10f),
             Visible = false
         };
         btnPlay.Click += (_, _) => TogglePlayback();
@@ -1263,7 +1263,7 @@ public class MainForm : Form
             Location = new Point(14, 50),
             AutoSize = true,
             ForeColor = AntStyle.Primary,
-            Font = new Font(AntStyle.FontName, 9f, FontStyle.Bold)
+            Font = AntStyle.GetFont(9f, FontStyle.Bold)
         };
         lblStatus = new Label
         {
@@ -1328,7 +1328,7 @@ public class MainForm : Form
             Location = new Point(14, 70),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
+            Font = AntStyle.GetFont(8f)
         };
 
         pnlSet.Controls.AddRange(new Control[] { lblHotkey, lblMode, cboStartKey, cboMode, cboPlayKey, lblModeTip });
@@ -1442,7 +1442,10 @@ public class MainForm : Form
     {
         bool mouse = _tabIndex == TabMouse;
         bool record = _tabIndex == TabRecord;
-        bool locked = _recorder != null || _player != null;
+        // 录制/回放期间锁热键；当前 Tab 对应的引擎在跑时也要锁——否则切一次 Tab
+        // 就把按键/鼠标运行的锁解开了（与 SetKeysUiLocked 的语义打架）
+        bool locked = _recorder != null || _player != null
+                      || (mouse ? _mouseEngine.Running : _engine.Running);
 
         lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连发热键";
         _hotkeySyncing = true;
@@ -1757,7 +1760,7 @@ public class MainForm : Form
                 Location = new Point(hintX, hintY + i * hintLine),
                 AutoSize = true,
                 ForeColor = AntStyle.TextTertiary,
-                Font = new Font(AntStyle.FontName, 8f)
+                Font = AntStyle.GetFont(8f)
             });
         }
     }
@@ -1835,7 +1838,7 @@ public class MainForm : Form
             Size = new Size(80, 28),
             Step = 1,
             Min = 1,
-            Max = 9999
+            Max = Limits.PlayCountMax
         };
         numPlayValue.Text = "1";
         numPlayValue.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
@@ -1886,7 +1889,7 @@ public class MainForm : Form
             Location = new Point(16, 226),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
+            Font = AntStyle.GetFont(8f)
         };
         page.Controls.Add(lblRecStatus);
     }
@@ -1907,7 +1910,7 @@ public class MainForm : Form
 
         if (infinite) return;
         numPlayValue.Min = 1;
-        numPlayValue.Max = timed ? 600 : 9999;
+        numPlayValue.Max = timed ? Limits.PlayMinuteMax : Limits.PlayCountMax;
         numPlayValue.SetValue(numPlayValue.Value); // 切换模式后按新范围重新钳制
         numPlayValue.Enabled = _recorder == null && _player == null;
     }
@@ -2680,21 +2683,13 @@ public class MainForm : Form
     private void AddEmptyRow()
     {
         if (_rows.Count >= MaxRows) return; // 已达上限（按钮此时应已置灰，双保险）
-        try
-        {
-            AddRow("", MinMs, false);
-            RelayoutRows();
-            UpdateRowButtons();
-            SetKeysUiLocked(_engine.Running);
-            RefreshScroll();
-            scrollBar.SetOffset(scrollBar.MaxOffset());
-            _rows[^1].TxtKey.Inner.Focus();
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("AddEmptyRow", ex);
-            throw;
-        }
+        AddRow("", MinMs, false);
+        RelayoutRows();
+        UpdateRowButtons();
+        SetKeysUiLocked(_engine.Running);
+        RefreshScroll();
+        scrollBar.SetOffset(scrollBar.MaxOffset());
+        _rows[^1].TxtKey.Inner.Focus();
     }
 
     private void DeleteRow(RowControls row)
@@ -2869,7 +2864,7 @@ public class MainForm : Form
             Location = new Point(16, 11),
             AutoSize = true,
             ForeColor = AntStyle.TextPri,
-            Font = new Font(AntStyle.FontName, 10.5f)
+            Font = AntStyle.GetFont(10.5f)
         });
         page.Controls.Add(new Label
         {
@@ -2877,14 +2872,14 @@ public class MainForm : Form
             Location = new Point(16 + titleSize.Width + 12, 11 + (titleSize.Height - rangeSize.Height) / 2),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            Font = new Font(AntStyle.FontName, 8f)
+            Font = AntStyle.GetFont(8f)
         });
     }
 
     /// <summary>行内静态文字：保持 AutoSize（不裁切），用 MeasureText 把文字垂直中心对齐到 28px 控件带中线。</summary>
     private static Label MakeRowText(string text, int x, Color? color = null, bool bold = false)
     {
-        var font = bold ? new Font(AntStyle.FontName, 9f, FontStyle.Bold) : new Font(AntStyle.FontName, 9f);
+        var font = AntStyle.GetFont(9f, bold ? FontStyle.Bold : FontStyle.Regular);
         int textH = TextRenderer.MeasureText(text, font).Height;
         return new Label
         {
@@ -2902,7 +2897,7 @@ public class MainForm : Form
     /// <summary>指定字号的实测尺寸（标题这类非常规字号用，去掉 MeasureText 自带的左右留白）。</summary>
     private static Size RowTextSize(string text, float size, bool bold = false)
     {
-        using var font = bold ? new Font(AntStyle.FontName, size, FontStyle.Bold) : new Font(AntStyle.FontName, size);
+        var font = AntStyle.GetFont(size, bold ? FontStyle.Bold : FontStyle.Regular);
         return TextRenderer.MeasureText(text, font, Size.Empty, TextFormatFlags.NoPadding);
     }
 

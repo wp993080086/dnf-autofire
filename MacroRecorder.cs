@@ -28,8 +28,6 @@ internal sealed class MacroRecorder : IDisposable
     /// <summary>点数或时长触顶，UI 轮询到后应主动停止录制（回调里不直接停，避免在钩子内销毁钩子）。</summary>
     public bool LimitReached => _limitReached;
 
-    public int PointCount { get { lock (_sync) return _points.Count; } }
-
     public long ElapsedMs => _sw.ElapsedMilliseconds;
 
     public void Start(Rectangle excludeBounds)

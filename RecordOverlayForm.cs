@@ -103,7 +103,7 @@ internal sealed class RecordOverlayForm : Form
         using (var dot = new SolidBrush(_blinkOn ? RecordRed : Color.FromArgb(255, 163, 158)))
             g.FillEllipse(dot, 14, (Height - DotSize) / 2, DotSize, DotSize);
 
-        using var boldFont = new Font(AntStyle.FontName, 9f, FontStyle.Bold);
+        var boldFont = AntStyle.GetFont(9f, FontStyle.Bold);
         TextRenderer.DrawText(g, "录制中", boldFont, new Rectangle(30, 0, 60, Height), RecordRed,
             TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 

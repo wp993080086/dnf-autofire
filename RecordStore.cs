@@ -23,9 +23,6 @@ public static class RecordKind
     public const int RightUp = 4;
     public const int MiddleDown = 5;
     public const int MiddleUp = 6;
-
-    public static bool IsDown(int k) => k is LeftDown or RightDown or MiddleDown;
-    public static bool IsUp(int k) => k is LeftUp or RightUp or MiddleUp;
 }
 
 /// <summary>录制时的虚拟桌面快照，用于回放前的分辨率变化提示。</summary>

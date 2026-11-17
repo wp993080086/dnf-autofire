@@ -21,7 +21,7 @@ internal sealed class ClosePromptForm : Form
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(396, 158);
         BackColor = Color.White;
-        Font = new Font(AntStyle.FontName, 9f);
+        Font = AntStyle.GetFont(9f);
         KeyPreview = true;
 
         var lblTitle = new Label
@@ -30,7 +30,7 @@ internal sealed class ClosePromptForm : Form
             Location = new Point(20, 18),
             AutoSize = true,
             ForeColor = AntStyle.TextPri,
-            Font = new Font(AntStyle.FontName, 10f, FontStyle.Bold)
+            Font = AntStyle.GetFont(10f, FontStyle.Bold)
         };
 
         var lblBody = new Label

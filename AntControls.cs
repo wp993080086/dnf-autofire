@@ -8,6 +8,19 @@ internal static class AntStyle
 {
     public const string FontName = "Microsoft YaHei UI";
 
+    // 界面里几十个标签/按钮共用同一批字号：每处 new 一次 Font 就是几十个没人释放的 GDI 对象，
+    // 统一按「字号 + 字形」发同一份实例（进程内常驻，调用方不要 Dispose）
+    private static readonly Dictionary<(float Size, FontStyle Style), Font> FontCache = new();
+
+    public static Font GetFont(float size, FontStyle style = FontStyle.Regular)
+    {
+        var key = (size, style);
+        if (FontCache.TryGetValue(key, out var font)) return font;
+        font = new Font(FontName, size, style);
+        FontCache[key] = font;
+        return font;
+    }
+
     public static readonly Color Primary = Color.FromArgb(22, 119, 255);       // #1677FF
     public static readonly Color PrimaryHover = Color.FromArgb(64, 150, 255);  // #4096FF
     public static readonly Color PrimaryBg = Color.FromArgb(230, 244, 255);    // #E6F4FF
@@ -68,28 +81,6 @@ internal static class AntStyle
 }
 
 /// <summary>
-/// AntD 白色圆角卡片（radius 8）。
-/// 不用 Region 裁剪（WinForms Region 有渲染 glitch）：控件背景 = 页面底色，
-/// OnPaint 里再填白色圆角矩形，四角自然露出底色。
-/// </summary>
-internal sealed class AntCard : Panel
-{
-    public AntCard()
-    {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
-        BackColor = AntStyle.BgLayout;
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        AntStyle.FillRounded(e.Graphics, Color.White, new Rectangle(0, 0, Width, Height), 8);
-        AntStyle.DrawRounded(e.Graphics, AntStyle.Split, new Rectangle(0, 0, Width - 1, Height - 1), 8);
-    }
-}
-
-/// <summary>
 /// AntD 按钮：Primary（蓝底白字）/ Default（白底描边）/ Text（文字按钮）。
 /// Danger=true 时主色换成红色。
 /// </summary>
@@ -142,6 +133,7 @@ internal sealed class AntButton : Control
     {
         base.OnEnabledChanged(e);
         Cursor = Enabled ? Cursors.Hand : Cursors.No; // 禁用控件收不到鼠标消息，窗体那边还有一层兜底
+        _hover = false; // 悬停中途被禁用时收不到 MouseLeave，不复位会一直画成悬停色
         Invalidate();
     }
 
@@ -231,6 +223,7 @@ internal sealed class AntCheckBox : Control
     {
         base.OnEnabledChanged(e);
         Cursor = Enabled ? Cursors.Hand : Cursors.No;
+        _hover = false; // 悬停中途被禁用时收不到 MouseLeave，不复位会一直画成悬停色
         Invalidate();
     }
 

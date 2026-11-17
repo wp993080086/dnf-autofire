@@ -44,6 +44,7 @@ internal sealed class MacroPlayer : IDisposable
     private int _current; // 正在进行（或刚放完）的是第几次，第 1 次进行中 = 1
     private int _sent;
     private int _gapMs = DefaultGapSec * 1000;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
+    private Rectangle _virtualScreen;            // 虚拟桌面范围：开始时取一次，逐点定位不必再查系统度量
     private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
 
     public bool Running => _running;
@@ -60,9 +61,6 @@ internal sealed class MacroPlayer : IDisposable
     public long ElapsedMs => _sw.ElapsedMilliseconds;
 
     public string ProfileName => _profile?.Name ?? "";
-
-    /// <summary>当前轮已回放的点数（进度展示用）。</summary>
-    public int SentPoints => Volatile.Read(ref _sent);
 
     /// <summary>回放自然结束（跑完次数 / 定时到点）时在工作线程上触发；手动 Stop 不触发语义上的"完成"。</summary>
     public event Action? Finished;
@@ -86,6 +84,7 @@ internal sealed class MacroPlayer : IDisposable
         _sent = 0;
         _stop = false;
         _running = true;
+        _virtualScreen = NativeInput.VirtualScreen();
         _sw = Stopwatch.StartNew();
 
         timeBeginPeriod(1); // Sleep(1) 才真正约 1ms
@@ -249,7 +248,7 @@ internal sealed class MacroPlayer : IDisposable
         cx = x;
         cy = y;
         if (DryRun) return;
-        if (!NativeInput.SendMouseMoveAbsolute(x, y)) MarkBlocked();
+        if (!NativeInput.SendMouseMoveAbsolute(x, y, _virtualScreen)) MarkBlocked();
     }
 
     private void SendButton(int vk, bool up)

@@ -36,6 +36,7 @@ internal sealed class MouseClickEngine
     private Thread? _worker;
     private volatile bool _stop;
     private readonly bool[] _swallowUp = new bool[5]; // 按 VK 键码索引（1/2/4）：按下被拦截时，配对的抬起也要拦截
+    private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
     public bool Running { get; private set; }
 
@@ -81,7 +82,11 @@ internal sealed class MouseClickEngine
 
         _stop = false;
         _sw.Restart();
-        timeBeginPeriod(1);
+        if (!_periodRaised)
+        {
+            timeBeginPeriod(1);
+            _periodRaised = true;
+        }
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "MouseClickEngine" };
         _worker.Start();
         _hook.Install();
@@ -94,7 +99,11 @@ internal sealed class MouseClickEngine
         try { _worker?.Join(1000); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
         _sw.Stop();
-        timeEndPeriod(1);
+        if (_periodRaised)
+        {
+            timeEndPeriod(1);
+            _periodRaised = false;
+        }
         // 释放仍处于"模拟按下"状态的鼠标键，避免卡键
         foreach (var t in _tasks)
         {

@@ -2,12 +2,13 @@ namespace DnfAutoFire;
 
 /// <summary>
 /// 轻量错误日志：写入 exe 同目录 error.log。
-/// 每次写入都是整文件重写（覆盖式更新），最多保留 200 行，自动淘汰最旧的记录。
+/// 追加写入，超过 200 条时整理一次（保留最新的 200 条），不做每次全量重写。
 /// </summary>
 internal static class Logger
 {
     private static readonly object Sync = new();
     private const int MaxEntries = 200;
+    private static int _lineCount = -1; // -1 = 还没读过盘；避免每次写都全量读一遍
 
     public static string LogPath => Path.Combine(AppPaths.DataDir, "error.log");
 
@@ -47,18 +48,30 @@ internal static class Logger
         {
             lock (Sync)
             {
-                var lines = new List<string>();
-                if (File.Exists(LogPath))
-                    lines.AddRange(File.ReadAllLines(LogPath));
-                lines.Add(entry);
-                if (lines.Count > MaxEntries)
-                    lines.RemoveRange(0, lines.Count - MaxEntries);
-                File.WriteAllLines(LogPath, lines); // 整文件重写 = 覆盖式更新
+                if (_lineCount < 0)
+                    _lineCount = File.Exists(LogPath) ? File.ReadAllLines(LogPath).Length : 0;
+                File.AppendAllText(LogPath, entry + Environment.NewLine);
+                _lineCount++;
+                if (_lineCount > MaxEntries) Trim();
             }
         }
         catch
         {
             // 日志本身失败时静默，不影响主流程
         }
+    }
+
+    /// <summary>超过上限时整体整理一次，只留最新 MaxEntries 条。</summary>
+    private static void Trim()
+    {
+        var lines = File.ReadAllLines(LogPath).ToList();
+        if (lines.Count <= MaxEntries)
+        {
+            _lineCount = lines.Count;
+            return;
+        }
+        lines.RemoveRange(0, lines.Count - MaxEntries);
+        File.WriteAllLines(LogPath, lines);
+        _lineCount = lines.Count;
     }
 }

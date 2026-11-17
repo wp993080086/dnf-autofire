@@ -255,6 +255,11 @@ public class MainForm : Form
     /// </summary>
     internal void DebugHotkeyTest()
     {
+        // 先看启动态（按键页，没切过 Tab）——这里是「下拉里没置灰」问题的现场
+        Console.WriteLine("[hotkeytest] 启动态（按键页，未切 Tab）：");
+        Dump("连发热键", cboStartKey);
+        Dump("回放热键", cboPlayKey);
+
         DebugShowTab(TabRecord);
         Application.DoEvents();
 
@@ -346,6 +351,47 @@ public class MainForm : Form
             Probe(btnAdd, "新增一行(已到上限)")
         })
             Console.WriteLine("[cursortest] " + line);
+
+        // 热键下拉展开后逐项：置灰项要「禁止」光标，可选项目手型
+        string ProbeItem(AntSelect sel, string label, string item)
+        {
+            int idx = sel.Inner.Items.IndexOf(item);
+            if (idx < 0) return $"{label}[{item}]: 无此项";
+            var pt = sel.DebugOpenAndLocateItem(idx);
+            if (pt == null) return $"{label}[{item}]: 取不到选项位置";
+            Cursor.Position = pt.Value;
+            for (int i = 0; i < 8; i++) { Application.DoEvents(); Thread.Sleep(20); }
+            var h = (Cursor.Current ?? Cursors.Default).Handle;
+            string cur = h == Cursors.No.Handle ? "No"
+                : h == Cursors.Hand.Handle ? "Hand"
+                : h == Cursors.IBeam.Handle ? "IBeam"
+                : "Default";
+            return $"{label}[{item}] {(sel.IsBlocked(item) ? "置灰" : "可选")}: → {cur}";
+        }
+
+        Console.WriteLine("[cursortest] —— 按键页：展开「连发热键」下拉");
+        foreach (var line in new[]
+        {
+            ProbeItem(cboStartKey, "连发热键", "F9"),   // 被录制热键占用 → 置灰
+            ProbeItem(cboStartKey, "连发热键", "F8"),   // 被连点热键占用 → 置灰
+            ProbeItem(cboStartKey, "连发热键", "F1"),   // 空闲 → 手型
+            ProbeItem(cboStartKey, "连发热键", "F12")   // 空闲 → 手型
+        })
+            Console.WriteLine("[cursortest] " + line);
+        cboStartKey.Inner.DroppedDown = false;
+        Application.DoEvents();
+
+        DebugShowTab(TabMouse);
+        Application.DoEvents();
+        Console.WriteLine("[cursortest] —— 鼠标页：展开「连点热键」下拉");
+        foreach (var line in new[]
+        {
+            ProbeItem(cboStartKey, "连点热键", "F6"),  // 被连发热键占用 → 置灰
+            ProbeItem(cboStartKey, "连点热键", "F2")   // 空闲 → 手型
+        })
+            Console.WriteLine("[cursortest] " + line);
+        cboStartKey.Inner.DroppedDown = false;
+        Application.DoEvents();
 
         DebugShowTab(TabRecord);
         Application.DoEvents();
@@ -1066,6 +1112,9 @@ public class MainForm : Form
         SetMouseUiLocked(_mouseEngine.Running);
         RefreshRunCard();
         RefreshScroll();
+        // 启动态也要收口一次：热键下拉的取值、启用状态、别的槽位置灰都靠它，
+        // 少了这一步得先切一次 Tab 才正常
+        SyncHotkeyUI();
     }
 
     private void RegisterHotkeys()

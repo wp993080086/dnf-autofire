@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace DnfAutoFire;
 
@@ -492,6 +493,12 @@ internal sealed class AntSelect : AntPanel
     private bool _hover;
     private bool _dropped;
 
+    // 下拉列表是原生 ComboLBox 窗口，光标由它自己决定；挂一个子类化钩子
+    // 才能把「置灰项」换成「禁止」光标（WinForms 层面收不到那个窗口的消息）
+    private const int LB_ITEMFROMPOINT = 0x01A9;
+    private IntPtr _hwndList;
+    private DropdownListHook? _listHook;
+
     /// <summary>标记一批不可选的选项（按文本匹配，忽略大小写）；传空即全部解禁。</summary>
     public void SetBlockedItems(IEnumerable<string> items)
     {
@@ -532,7 +539,7 @@ internal sealed class AntSelect : AntPanel
         };
         Inner.MouseEnter += (_, _) => { _hover = true; _face.Invalidate(); };
         Inner.MouseLeave += (_, _) => { _hover = false; _face.Invalidate(); };
-        Inner.DropDown += (_, _) => { _dropped = true; _face.Invalidate(); };
+        Inner.DropDown += (_, _) => { _dropped = true; _face.Invalidate(); EnsureListHook(); };
         Inner.DropDownClosed += (_, _) => { _dropped = false; _face.Invalidate(); };
         Inner.EnabledChanged += (_, _) => _face.Invalidate();
 
@@ -550,6 +557,117 @@ internal sealed class AntSelect : AntPanel
         _face.SetBounds(0, 0, Width, Height);
         // 容器高度自适应 Combo 实际高度
         if (Height != Inner.Height) Height = Inner.Height;
+    }
+
+    /// <summary>调试入口：展开下拉并返回第 index 项的屏幕中心点（取不到返回 null）。</summary>
+    internal Point? DebugOpenAndLocateItem(int index)
+    {
+        const int LB_GETITEMRECT = 0x0198;
+        Inner.DroppedDown = true;
+        Application.DoEvents();
+        EnsureListHook();
+        if (_hwndList == IntPtr.Zero) return null;
+
+        IntPtr buf = Marshal.AllocHGlobal(Marshal.SizeOf<NativeMethods.RECT>());
+        try
+        {
+            if (NativeMethods.SendMessage(_hwndList, LB_GETITEMRECT, (IntPtr)index, buf).ToInt64() == -1)
+                return null;
+            var rect = Marshal.PtrToStructure<NativeMethods.RECT>(buf);
+            var pt = new NativeMethods.POINT
+            {
+                X = (rect.Left + rect.Right) / 2,
+                Y = (rect.Top + rect.Bottom) / 2
+            };
+            if (!NativeMethods.ClientToScreen(_hwndList, ref pt)) return null;
+            return new Point(pt.X, pt.Y);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buf);
+        }
+    }
+
+    /// <summary>
+    /// 下拉列表窗口每次展开时可能重建/复用它，这里按 GetComboBoxInfo 拿到真实句柄挂钩子。
+    /// 只有展开后那个窗口才存在，所以在 DropDown 事件里挂。
+    /// </summary>
+    private void EnsureListHook()
+    {
+        var info = new NativeMethods.COMBOBOXINFO
+        {
+            cbSize = Marshal.SizeOf<NativeMethods.COMBOBOXINFO>()
+        };
+        if (!NativeMethods.GetComboBoxInfo(Inner.Handle, ref info) || info.hwndList == IntPtr.Zero) return;
+        if (_listHook != null && _hwndList == info.hwndList) return;
+
+        _listHook?.ReleaseHandle();
+        _hwndList = info.hwndList;
+        _listHook = new DropdownListHook(this);
+        _listHook.AssignHandle(_hwndList);
+    }
+
+    /// <summary>列表客户区坐标 → 选项下标（-1 = 落在空白处）。</summary>
+    private int IndexFromPoint(int x, int y)
+    {
+        if (_hwndList == IntPtr.Zero) return -1;
+
+        // LB_ITEMFROMPOINT：低字是选项下标，高字非 0 表示点不在任何选项上
+        var lParam = (IntPtr)(((y & 0xFFFF) << 16) | (x & 0xFFFF));
+        long result = NativeMethods.SendMessage(_hwndList, LB_ITEMFROMPOINT, IntPtr.Zero, lParam).ToInt64();
+        return (result >> 16) != 0 ? -1 : (int)(result & 0xFFFF);
+    }
+
+    /// <summary>
+    /// 按下拉列表当前悬停项设光标：置灰项「禁止」、可选项手型、空白处箭头。
+    /// 下拉展开时鼠标被列表捕获，系统不再发 WM_SETCURSOR，只能在 WM_MOUSEMOVE 里自己设。
+    /// </summary>
+    private void ApplyListCursor(int x, int y)
+    {
+        int index = IndexFromPoint(x, y);
+        if (index < 0 || index >= Inner.Items.Count)
+        {
+            Cursor.Current = Cursors.Default;
+            return;
+        }
+        Cursor.Current = IsBlocked(Inner.Items[index]?.ToString()) ? Cursors.No : Cursors.Hand;
+    }
+
+    /// <summary>
+    /// 原生下拉列表（ComboLBox）窗口的消息钩子：按悬停项决定光标。
+    /// 鼠标被列表捕获时收不到 WM_SETCURSOR，所以主力是 WM_MOUSEMOVE，
+    /// WM_SETCURSOR 只作为没捕获时的兜底。
+    /// </summary>
+    private sealed class DropdownListHook : NativeWindow
+    {
+        private const int WM_SETCURSOR = 0x0020;
+        private const int WM_MOUSEMOVE = 0x0200;
+        private const int HTCLIENT = 1;
+        private readonly AntSelect _owner;
+
+        public DropdownListHook(AntSelect owner) => _owner = owner;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_MOUSEMOVE)
+            {
+                long lp = m.LParam.ToInt64();
+                _owner.ApplyListCursor((int)(lp & 0xFFFF), (int)((lp >> 16) & 0xFFFF));
+            }
+            else if (m.Msg == WM_SETCURSOR && ((long)m.LParam & 0xFFFF) == HTCLIENT)
+            {
+                _owner.ApplyListCursor(Cursor.Position.X, Cursor.Position.Y);
+                m.Result = (IntPtr)1; // 已自行设置光标，别再让系统覆盖
+                return;
+            }
+            base.WndProc(ref m);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _listHook?.ReleaseHandle();
+        base.Dispose(disposing);
     }
 
     private void Inner_DrawItem(object? sender, DrawItemEventArgs e)

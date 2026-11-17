@@ -18,6 +18,8 @@ internal enum PlayMode { Count, Infinite, Duration }
 /// - 按下/抬起间隔 &lt;20ms 时补到 20ms（与连发引擎同一个下限结论：一帧 60fps≈16.7ms）。
 /// - 轮与轮之间按「回放间隔」等待（默认 1 秒，可设 0 = 轮尾直接接轮头）。
 /// - 停止时补发所有处于按下状态的键，避免"回放停在按住那一帧"导致卡键。
+/// - 工作线程不轮询：按时间轴下一个点的到期时刻等待，到点前线程一直睡着；
+///   轮间隔里连 1ms 系统计时精度也还回去，最后 50ms 再提回来定点，避免长间隔累积漂移。
 /// </summary>
 internal sealed class MacroPlayer : IDisposable
 {
@@ -27,12 +29,17 @@ internal sealed class MacroPlayer : IDisposable
     private const int InterpGapMs = 32;   // 相邻移动间隔超过它才插值
     private const int InterpStepMs = 16;  // 插值步长（对齐 60fps 轮询）
     private const int InterpMinPx2 = 16;  // 位移平方（4px）：太小不动也没必要插
+    private const int WaitFineWindowMs = 50; // 剩余时间超过它先粗等，把最后 50ms 留给小步
+    private const int WaitSliceMs = 10;      // 尾段单次等待上限：被调度延迟后下一轮能立刻补偿
 
     // 测试用：DNF_DRYRUN=1 时只跑时间轴、不注入任何输入
     internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
 
     private readonly object _sync = new();
     private readonly HashSet<int> _pressed = new(); // 当前处于按下状态的鼠标键（VK）
+    private readonly AutoResetEvent _wake = new(false); // Stop 时叫醒睡在等待上的工作线程
+    private readonly object _periodSync = new();
+    private bool _periodRaised; // 1ms 计时精度是否已申请（timeBeginPeriod/timeEndPeriod 必须成对）
     private Thread? _worker;
     private volatile bool _stop;
     private volatile bool _running;
@@ -46,6 +53,10 @@ internal sealed class MacroPlayer : IDisposable
     private int _gapMs = DefaultGapSec * 1000;   // 两轮之间的等待（0 = 不等待，轮尾直接接轮头）
     private Rectangle _virtualScreen;            // 虚拟桌面范围：开始时取一次，逐点定位不必再查系统度量
     private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
+
+#if DEBUG
+    private readonly List<int> _late = new(); // DryRun 下每个到点的迟到毫秒，回放结束时打印分布
+#endif
 
     public bool Running => _running;
 
@@ -82,12 +93,16 @@ internal sealed class MacroPlayer : IDisposable
         _loop = 0;
         _current = 0;
         _sent = 0;
+#if DEBUG
+        _late.Clear();
+#endif
         _stop = false;
         _running = true;
+        _wake.Reset();   // 上一次 Stop 可能留下唤醒信号，先吃掉，否则第一轮等待会立即醒
         _virtualScreen = NativeInput.VirtualScreen();
         _sw = Stopwatch.StartNew();
 
-        timeBeginPeriod(1); // Sleep(1) 才真正约 1ms
+        // 1ms 精度不在这里申请：工作线程真正开始放点时才要，轮间隔里会还回去
         try
         {
             _worker = new Thread(Run) { IsBackground = true, Name = "MacroPlayer" };
@@ -95,7 +110,6 @@ internal sealed class MacroPlayer : IDisposable
         }
         catch
         {
-            timeEndPeriod(1); // 线程没起来就自己还回去，别让 finally 再减一次
             _running = false;
             throw;
         }
@@ -104,6 +118,7 @@ internal sealed class MacroPlayer : IDisposable
     public void Stop()
     {
         _stop = true;
+        _wake.Set();   // 线程可能正睡在长间隔或等待下一个点上，叫醒它才能及时收手
         try { _worker?.Join(1500); } catch { /* 线程可能尚未启动 */ }
         _worker = null;
         ReleaseAll(); // 兜底：线程已退出但仍有键处于按下状态
@@ -120,6 +135,8 @@ internal sealed class MacroPlayer : IDisposable
 
         try
         {
+            SetPeriod(true); // 真要按时间轴放点，需要 1ms 精度
+
             while (!_stop)
             {
                 Volatile.Write(ref _current, loops + 1);
@@ -136,11 +153,11 @@ internal sealed class MacroPlayer : IDisposable
                 if (_mode == PlayMode.Duration)
                 {
                     if (now >= totalMs) break;
-                    WaitUntil(Math.Min(now + _gapMs, totalMs));
+                    WaitGap(Math.Min(now + _gapMs, totalMs));
                 }
                 else
                 {
-                    WaitUntil(now + _gapMs);
+                    WaitGap(now + _gapMs);
                 }
             }
         }
@@ -152,8 +169,11 @@ internal sealed class MacroPlayer : IDisposable
         {
             ReleaseAll();
             _running = false;
-            timeEndPeriod(1);
+            SetPeriod(false);
             if (DryRun) Logger.Info($"[dry] 回放结束：{profile.Name} {loops} 轮 {_sent} 点 {_sw.ElapsedMilliseconds}ms");
+#if DEBUG
+            if (DryRun && _late.Count > 0) LogLateStats();
+#endif
             try { Finished?.Invoke(); } catch (Exception ex) { Logger.Error("MacroPlayer.Finished", ex); }
         }
     }
@@ -231,14 +251,53 @@ internal sealed class MacroPlayer : IDisposable
         if (downVk != 0) SendButton(downVk, up: true);
     }
 
-    /// <summary>等到时间轴的某个绝对毫秒点；轮询粒度 1ms，_stop 时立刻返回。</summary>
+    /// <summary>
+    /// 等到时间轴的某个绝对毫秒点。线程一直睡到点才醒，到点精度仍是 1ms 级；
+    /// 中途被 Stop 叫醒会立刻返回，由调用方检查 _stop。
+    ///
+    /// 分两段：剩余超过 50ms 先一次性粗等（长间隔不必反复唤醒），最后 50ms 每 10ms 醒一次。
+    /// 单次长等待一旦被系统调度推迟就会整段迟到（实测 25ms 间隔偶发 40ms 以上偏差），
+    /// 小步等待每醒一次重算剩余，能把迟到压在一个步长内并立即补偿。
+    /// </summary>
     private void WaitUntil(int targetMs)
     {
         while (!_stop)
         {
             int left = targetMs - (int)_sw.ElapsedMilliseconds;
-            if (left <= 0) return;
-            Thread.Sleep(1);
+            if (left <= 0)
+            {
+#if DEBUG
+                if (DryRun) _late.Add(-left);
+#endif
+                return;
+            }
+            _wake.WaitOne(left > WaitFineWindowMs ? left - WaitFineWindowMs : Math.Min(left, WaitSliceMs));
+        }
+    }
+
+    /// <summary>
+    /// 轮与轮之间的间隔等待：长间隔里把 1ms 系统计时精度还回去（只剩系统默认的 ~15.6ms 定时器），
+    /// 临门 30ms 再提回来精确定点。否则默认粒度会让每轮多出十几毫秒，
+    /// 定时模式下几千轮累积下来总时长会明显偏长。
+    /// </summary>
+    private void WaitGap(int targetMs)
+    {
+        if (_gapMs <= 0) return;   // 0 = 轮尾直接接轮头，没有间隔可等
+        SetPeriod(false);
+        int coarse = targetMs - WaitFineWindowMs - (int)_sw.ElapsedMilliseconds;
+        if (coarse > 0) _wake.WaitOne(coarse);
+        SetPeriod(true);
+        WaitUntil(targetMs);
+    }
+
+    /// <summary>提/还系统计时精度（1ms）。加锁只为防 Stop 与工作线程同时改（Join 超时的极端情况）。</summary>
+    private void SetPeriod(bool on)
+    {
+        lock (_periodSync)
+        {
+            if (_periodRaised == on) return;
+            if (on) timeBeginPeriod(1); else timeEndPeriod(1);
+            _periodRaised = on;
         }
     }
 
@@ -292,6 +351,18 @@ internal sealed class MacroPlayer : IDisposable
         RecordKind.MiddleDown => NativeMethods.VK_MBUTTON,
         _ => NativeMethods.VK_LBUTTON
     };
+
+#if DEBUG
+    /// <summary>Debug + DryRun 专用：打印每个时间点的迟到分布，用来验证等待策略有没有被调度推迟。</summary>
+    private void LogLateStats()
+    {
+        var arr = _late.OrderBy(v => v).ToArray();
+        int p50 = arr[arr.Length / 2];
+        int p99 = arr[Math.Min(arr.Length - 1, (int)(arr.Length * 0.99))];
+        Logger.Info($"[probe] 回放等待偏差：{arr.Length} 次 均值 {arr.Average():F2}ms  p50 {p50}  p99 {p99}  " +
+                    $"最大 {arr[^1]}  迟到>10ms {arr.Count(v => v > 10)} 次  迟到>30ms {arr.Count(v => v > 30)} 次");
+    }
+#endif
 
     private static int UpToVk(int kind) => kind switch
     {

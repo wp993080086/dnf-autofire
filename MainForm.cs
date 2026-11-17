@@ -2333,13 +2333,12 @@ public class MainForm : Form
         row.NumCount.Inner.MaxLength = 5;
         x += 72 + 6;
         row.LblCount = MakeRowText("次", x); // 单位跟着次数框一起显隐
-        ApplyKeyStopMode(row, stopMode, stopValue); // 初始收口：松手停止时隐藏次数框
         row.LnkDel = new AntButton
         {
             Kind = AntButton.AntKind.Text,
             Danger = true,
             Text = "删除",
-            Location = new Point(RowWidth - 48, 3), // 固定在行尾右侧，各行的「删除」上下对齐
+            Location = new Point(RowWidth - 48, 3), // 初始落位（真正位置由 ApplyKeyStopMode 按当前模式算）
             Size = new Size(44, 26),
             Visible = false
         };
@@ -2381,17 +2380,23 @@ public class MainForm : Form
         {
             row.Chk, row.TxtKey, lblGap, row.TxtMs, lblMs, row.SelStop, row.NumCount, row.LblCount, row.LnkDel
         });
+        // 挂到行里之后 Label 才有实测宽度：此刻再收口一次，顺带把「删除」摆到内容后面
+        ApplyKeyStopMode(row, stopMode, stopValue);
 
         _rows.Add(row);
     }
 
-    /// <summary>按停止条件模式调整次数框：auto=显示（0-99999，0 表示无限），hold=隐藏（连「次」一起）。</summary>
+    /// <summary>
+    /// 按停止条件模式调整次数框：auto=显示（0-99999，0 表示无限），hold=隐藏（连「次」一起）。
+    /// 「删除」跟着当前内容的尾巴走（auto 跟在「次」后、hold 跟在停止条件后），不固定在行尾。
+    /// </summary>
     private void ApplyKeyStopMode(RowControls r, string mode, int value)
     {
         bool auto = mode == "auto";
         r.NumCount.Visible = auto;
         r.LblCount.Visible = auto;
         r.NumCount.Enabled = auto && !_engine.Running;
+        r.LnkDel.Left = auto ? r.LblCount.Right + 6 : r.SelStop.Right + 8;
         if (!auto) return;
         r.NumCount.Min = 0;
         r.NumCount.Max = MaxKeyRepeat;

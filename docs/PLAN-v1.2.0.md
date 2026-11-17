@@ -218,7 +218,7 @@ ClientSize = 600 × 470
 
 - 停止条件下拉两项：**松手停止**（默认，等价于原行为）/ **自动连按**。
 - 选「自动连按」时右侧出现次数框：`0` = 无限次，`1–100000`，步进 100，可手输；选「松手停止」时该框隐藏（复用 `AntNumber` 的 `Min/Max/Step` 与显隐套路）。
-- 行宽 516 → **544**（与鼠标页对齐）→ **584**（加「次」后再加宽窗口 40），行内坐标（8px 间距）：复选框 `(0,2) 56×28` → 键名框 `(58,3) 56×28` →「键，间隔」`x=122` → 数字框 `(186,3) 84×28` →「毫秒，」`x=278` → 下拉 `(330,2) 96` → 次数框 `(434,3) 72×28` →「次」`x=512` →「删除」`(536,3) 44×26`。
+- 行宽 516 → **544**（与鼠标页对齐）→ **584**（加「次」后再加宽窗口 40），行内坐标（8px 间距）：复选框 `(0,2) 56×28` → 键名框 `(58,3) 56×28` →「键，间隔」`x=122` → 数字框 `(186,3) 84×28` →「毫秒，」`x=278` → 下拉 `(330,2) 96` → 次数框 `(434,3) 72×28` →「次」`x=512` →「删除」随内容走（auto 在 538、hold 在 434，`44×26`）。
 
 **键名支持范围与校验（本轮补强）**
 
@@ -687,7 +687,7 @@ MacroPlayer.Start(profile, repeatMode, value)
 | 合并的两个坑 | ① `JsonValueKind` 把 `true`/`false` 拆成 `True`、`False` 两个值，直接比 `GetValueKind()` 会把合法布尔值判成类型不符 → 加 `KindMatches` 专门放行布尔；② 默认值为 `null` 的字段（`ConfigVersion`）在骨架里是 `null`，需要单独走"沿用文件值"分支，否则每次加载都会把它丢掉并记一次"非法值回落" |
 | 旧字段 `PlayGapMs` → `PlayGapSec` | 合并前先跑 `MigrateLegacy`：文件里没有 `PlayGapSec` 但有 `PlayGapMs` 时换算成秒（`(ms+500)/1000`），日志留一条迁移记录 |
 | 自动点击次数框步进 | `Step` 1、默认 `1`、范围 `0–99999`（0 = 无限），数字框后补「次」单位；单位与次数框一起显隐（松手停止时都隐藏）。`Limits.MouseCountMax = 99999`，与按键连按（`Limits.KeyCountMax = 100000`）分开 |
-| 按键次数框与鼠标页对齐 | 按键行 `NumCount` 改成 `Step=1`、`Max=99999`（`Limits.KeyCountMax` 同步 100000 → 99999），框后加「次」`Label`（`RowControls.LblCount`），`ApplyKeyStopMode` 里与数值框一起显隐。行内控件按实测宽度顺排，间距统一 8px，控件沿用原尺寸（`TxtKey` 56 / `TxtMs` 84 / `SelStop` 96 / `NumCount` 72）；「次」紧跟次数框（x=512），`LnkDel` 固定在 `RowWidth - 48 = 536`、各行上下对齐，两者互不重叠。整行需要 584 宽，装不进原来的 544，于是窗口 600 → 640、页面 596 → 636、`RowWidth` 544 → 584（高度不变） |
+| 按键次数框与鼠标页对齐 | 按键行 `NumCount` 改成 `Step=1`、`Max=99999`（`Limits.KeyCountMax` 同步 100000 → 99999），框后加「次」`Label`（`RowControls.LblCount`），`ApplyKeyStopMode` 里与数值框一起显隐。行内控件按实测宽度顺排，间距统一 8px，控件沿用原尺寸（`TxtKey` 56 / `TxtMs` 84 / `SelStop` 96 / `NumCount` 72）；「次」紧跟次数框（x=512），`LnkDel` 不固定、跟着内容尾巴走：`ApplyKeyStopMode` 里 `Left = auto ? LblCount.Right + 6 : SelStop.Right + 8`（切停止条件时一起挪），两者互不重叠。最宽情形（auto + 删除）到 582，故整行需要 584 宽，装不进原来的 544，于是窗口 600 → 640、页面 596 → 636、`RowWidth` 544 → 584（高度不变） |
 | 录制页两个按钮并排 | 两个按钮放进左下角启动区 `pnlRun`（不另起一行）：`RunBtnW = (244 - 16) / 2 = 114`，`btnRecord` 在 (14,6)、`btnPlay` 在 (144,6)，与 `btnMain` 同一块 244×40 区域。`RefreshRunCard` 按 Tab 切换 `Visible`：录制页显示这两枚、隐藏 `btnMain`；其它页反之。按钮文案/可用性收进 `SyncRecordButtons()`，`UpdateRecordUi` 与切页都会调 |
 | 录制页标题统一 | 改用 `AddPageTitle(page, "鼠标录制回放", "最多 10 个方案，单次录制上限 10 分钟")`；列表下移到 y=38，回放设置行 y=170（页内不再放按钮，整行上移），状态行 y=202 + 固定提示 y=222 |
 | 录制页状态行复用 | `lblRecStatus` 挪到 y=202 当「状态/提示」两用：空闲显示 `RecordHint`（F9/F10 说明，8pt 灰），录制中红字「● 录制中…」，回放中由 `PlayTimer_Tick` 写进度（蓝字）。「共 N 个方案」「已选：方案X · 时长」文案与 `lblPlayInfo` / `DescribeSelection` 一并删除 |

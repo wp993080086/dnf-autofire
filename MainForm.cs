@@ -1049,16 +1049,17 @@ public class MainForm : Form
         pnlMain.Controls.Add(tabHeader);
         Controls.Add(pnlMain);
 
-        // 启动区（左下）：按键/鼠标页是一个主按钮；录制页换成「开始录制 / 开始回放」两个等宽按钮
-        var pnlRun = new Panel { Location = new Point(2, 306), Size = new Size(294, 92), BackColor = Color.White };
-        const int RunBtnW = 114;              // (244 - 间距 16) / 2，两个按钮均分同一块宽度
+        // 启动区（左下）：按键/鼠标页是一个主按钮；录制页换成「开始录制 / 开始回放」两个等宽按钮。
+        // 设置区（右下）内容不多，分隔线右移 100px：启动区 394、设置区 240，按钮能铺开、右侧也不空
+        var pnlRun = new Panel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.White };
+        const int RunBtnW = 175;              // (366 - 间距 16) / 2，两个按钮均分同一块宽度
         const int RunBtnGap = 16;
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
             Text = "开启连发",
             Location = new Point(14, 6),
-            Size = new Size(244, 40),
+            Size = new Size(366, 40),
             Font = new Font(AntStyle.FontName, 10f)
         };
         btnRecord = new AntButton
@@ -1104,8 +1105,9 @@ public class MainForm : Form
         Controls.Add(pnlRun);
 
         // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
-        // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效
-        var pnlSet = new Panel { Location = new Point(298, 306), Size = new Size(340, 92), BackColor = Color.White };
+        // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效。
+        // 分隔线右移后只剩 240 宽：标签 14 起、下拉 86 起 120 宽，右侧仍留 34 的余量给说明文字
+        var pnlSet = new Panel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.White };
         lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
         lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
@@ -1166,8 +1168,8 @@ public class MainForm : Form
         using var line = new SolidBrush(AntStyle.Split);
         // 主区与底部两区之间的水平分隔（2px）
         g.FillRectangle(line, 0, 304, Width, 2);
-        // 启动区与设置区之间的垂直分隔（2px）
-        g.FillRectangle(line, 296, 304, 2, Height - 304);
+        // 启动区与设置区之间的垂直分隔（2px）：比原来右移 100，给左侧启动区更多空间
+        g.FillRectangle(line, 396, 304, 2, Height - 304);
     }
 
     private void AttachClearFocus(Control.ControlCollection controls)
@@ -1277,19 +1279,20 @@ public class MainForm : Form
         cboMode.Visible = !mouse && !record;
         cboPlayKey.Visible = record;
 
-        // 录制页没有第三行说明（热键用法已在页内），两行热键整体下移 8px 在卡片里上下居中
-        lblHotkey.Top = record ? 20 : 12;
-        cboStartKey.Top = record ? 16 : 8;
-        lblMode.Top = record ? 52 : 44;
-        cboMode.Top = record ? 48 : 40;
-        cboPlayKey.Top = record ? 48 : 40;
+        // 卡片内纵向排布：按键页保持原来位置（下面还有一行说明），录制页两行居中，
+        // 鼠标页只有一行也居中——都不带第三行小字
+        int topLabel = 12, topCtl = 8, midLabel = 44, midCtl = 40;
+        if (record) { topLabel = 20; topCtl = 16; midLabel = 52; midCtl = 48; }
+        else if (mouse) { topLabel = 36; topCtl = 32; }
+        lblHotkey.Top = topLabel;
+        cboStartKey.Top = topCtl;
+        lblMode.Top = midLabel;
+        cboMode.Top = midCtl;
+        cboPlayKey.Top = midCtl;
 
-        lblModeTip.Text = record
-            ? ""
-            : mouse
-                ? "连点热键全局开关鼠标连点，与连发热键相互独立"
-                : "";
-        lblModeTip.Visible = !record;
+        // 只有按键页在卡片底部带一行说明（跟着「保留原生 / 拦截原生」变）
+        lblModeTip.Visible = !record && !mouse;
+        lblModeTip.Text = "";
         if (!record && !mouse) ApplyKeyModeTip(); // 按键页：说明跟着「保留原生 / 拦截原生」走
     }
 

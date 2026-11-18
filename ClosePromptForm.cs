@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 点窗口 X 时的二选一：最小化到托盘继续运行 / 直接退出。
@@ -13,7 +13,7 @@ internal sealed class ClosePromptForm : Form
 
     public ClosePromptForm(bool busy)
     {
-        Text = "关闭 DNF 连发工具";
+        Text = "关闭 键鼠工厂";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

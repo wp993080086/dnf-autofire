@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 轨迹录制器：钩子回调里只做「过滤 + 追加到预分配 List」——不写文件、不碰 UI、不分配引用对象。

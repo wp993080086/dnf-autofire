@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 鼠标页：连点引擎启停、按/停模式描述、界面锁与数值归一。
 public partial class MainForm : Form

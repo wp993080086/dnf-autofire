@@ -1,8 +1,8 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 配置与日志的数据目录：默认 EXE 同目录（绿色软件习惯）；
-/// 若目录无写入权限（如 Program Files），自动回退到 %APPDATA%\DnfAutoFire。
+/// 若目录无写入权限（如 Program Files），自动回退到 %APPDATA%\KeyMouseFactory。
 /// </summary>
 internal static class AppPaths
 {
@@ -22,7 +22,7 @@ internal static class AppPaths
         {
             DataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "DnfAutoFire");
+                "KeyMouseFactory");
             Directory.CreateDirectory(DataDir);
         }
     }

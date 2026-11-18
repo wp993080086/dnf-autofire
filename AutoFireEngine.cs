@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 连发引擎：独立高精度线程按 Stopwatch 调度。

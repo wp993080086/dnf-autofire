@@ -1,4 +1,4 @@
-# DNF 连发工具
+# 键鼠工厂
 
 一个轻量的 Windows 桌面连发（按键重复触发）工具，使用 C# / .NET 8 WinForms 编写，单文件 EXE、开箱即用、内存占用低。三页签：**按键连发 / 鼠标连点 / 轨迹录制与回放**。
 
@@ -36,12 +36,12 @@
 - **独立双引擎**：按键连发与鼠标连点各自独立运行、互不冲突，可同时开启；主按钮跟随当前 Tab 控制对应引擎，并有「当前控制」标识提示
 - **托盘运行**：开启后自动最小化到托盘，左键点击图标唤出窗口，右键菜单只有「显示窗口 / 打开日志 / 退出程序」；录制与回放请用热键或状态条上的按钮；悬停图标即可看到当前状态（运行中 / 录制中 / 回放中第几次）
 - **关闭确认**：点窗口右上角 X（或 Alt+F4）会先问一句「最小化到托盘 / 退出程序」，选最小化则程序继续在后台跑；托盘右键「退出程序」可直接退出
-- **配置持久化**：所有配置自动保存到 `config.json`，下次启动自动加载（默认与 EXE 同目录；若目录无写入权限，自动改用 `%APPDATA%\DnfAutoFire`）。改动立即在内存生效，写盘做 400ms 防抖——连续点箭头只落一次盘，关闭窗口时强制落盘
+- **配置持久化**：所有配置自动保存到 `config.json`，下次启动自动加载（默认与 EXE 同目录；若目录无写入权限，自动改用 `%APPDATA%\KeyMouseFactory`）。改动立即在内存生效，写盘做 400ms 防抖——连续点箭头只落一次盘，关闭窗口时强制落盘
 - **错误日志**：EXE 同目录的 `error.log`，记录异常与关键操作（保留最近 200 行）
 
 ## 使用说明
 
-1. 双击运行 `dnf-autofire.exe`（无需安装；程序以**管理员权限**运行，会弹出 UAC 确认框——DNF 由 TenProtect 保护以高权限运行，Windows UIPI 会丢弃低权限进程注入的按键，只有管理员运行连发注入才能到达游戏）
+1. 双击运行 `key-mouse-factory.exe`（无需安装；程序以**管理员权限**运行，会弹出 UAC 确认框——DNF 由 TenProtect 保护以高权限运行，Windows UIPI 会丢弃低权限进程注入的按键，只有管理员运行连发注入才能到达游戏）
 2. 在「按键」页配置目标键、间隔毫秒与停止条件，勾选需要连发的行
 3. 点击左下角「开启连发」按钮（或按热键 `F6`）——「松手停止」的行按住键才连发；「自动连按」的行开启后不用按任何键，次数跑完会自动停（全部是自动连按行时，整体自动关回停止态）
 4. 需要鼠标连点时切到「鼠标」页，配置间隔与停止条件、勾选启用，点击「开启连点」；「松手停止」的行**按住对应鼠标键即连点，松开即停**，「自动点击」的行开启后不用按任何键，次数跑完自动停（全部是自动点击行时，整体自动关回停止态）
@@ -103,7 +103,7 @@
 
 | 文件 | 位置 | 说明 |
 | --- | --- | --- |
-| `config.json` | EXE 同目录（无写权限时 `%APPDATA%\DnfAutoFire\`） | 按键、鼠标、热键、模式、回放模式等全部设置 |
+| `config.json` | EXE 同目录（无写权限时 `%APPDATA%\KeyMouseFactory\`） | 按键、鼠标、热键、模式、回放模式等全部设置 |
 | `recordings.json` | 同上 | 录制方案（含轨迹点），最多 10 个方案；与配置文件分开，避免改设置时重写大文件 |
 | `error.log` | 同上 | 异常与关键操作日志，只保留最近 200 行；托盘菜单「打开日志」可直接用系统默认程序打开 |
 
@@ -151,7 +151,7 @@
   - 已废弃的字段（如早先的 `PlayGapMs`）→ 丢弃，回写后从文件里消失；`PlayGapMs` 会先换算成秒写进 `PlayGapSec`
   - 越界的值（如间隔 99999、热键写成 `F13`）→ 钳到允许范围或回落默认值
   - 每次启动都会把合并结果写回文件，并把 `ConfigVersion` 更新为当前程序版本
-- 配置文件默认与 EXE 同目录；若 EXE 所在目录无写入权限，则使用 `%APPDATA%\DnfAutoFire\config.json`
+- 配置文件默认与 EXE 同目录；若 EXE 所在目录无写入权限，则使用 `%APPDATA%\KeyMouseFactory\config.json`
 - 文件完全无法解析时以默认配置运行（文件保留原样以便排查），并记录到 `error.log`；下次保存配置时覆盖
 
 ## 环境要求
@@ -160,7 +160,7 @@
 
 ## 下载
 
-前往 [Releases](https://github.com/wp993080086/dnf-autofire/releases) 下载最新版 `dnf-autofire.exe`，单文件、无需安装。
+前往 [Releases](https://github.com/wp993080086/key-mouse-factory/releases) 下载最新版 `key-mouse-factory.exe`，单文件、无需安装。
 
 推送 `v` 开头的 tag（如 `v1.0.0-beta`、`v1.2.0`）会自动触发 GitHub Actions 构建并发布到 Releases。
 
@@ -176,14 +176,14 @@ dotnet publish -c Release -r win-x64 ^
   -p:EnableCompressionInSingleFile=true
 ```
 
-产物位于 `bin/Release/net8.0-windows/win-x64/publish/dnf-autofire.exe`，为自包含单文件，目标机器无需安装 .NET 运行时。
+产物位于 `bin/Release/net8.0-windows/win-x64/publish/key-mouse-factory.exe`，为自包含单文件，目标机器无需安装 .NET 运行时。
 
 ## 单元测试
 
-`tests/DnfAutoFire.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、录制方案脏数据钳制、轨迹坐标归一化、回放进度文本等纯逻辑（79 项）：
+`tests/KeyMouseFactory.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、录制方案脏数据钳制、轨迹坐标归一化、回放进度文本等纯逻辑（79 项）：
 
 ```bash
-dotnet test tests/DnfAutoFire.Tests/DnfAutoFire.Tests.csproj
+dotnet test tests/KeyMouseFactory.Tests/KeyMouseFactory.Tests.csproj
 ```
 
 CI 在发布前会先以 Release 配置跑一遍测试，测试不通过就不会出包。

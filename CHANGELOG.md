@@ -13,8 +13,11 @@
 - **托盘「打开日志」**：直接调系统默认程序打开 `error.log`，文件不存在时先创建
 - **崩溃弹窗**：未处理异常不再只吞进日志，弹窗显示类型/消息/堆栈，提供「打开日志」与「复制详情」；连环异常只弹一次
 - **注入被拦截可见提示**：连发/连点/回放的 `SendInput` 返回 0（未以管理员运行、游戏权限更高）时，托盘气泡 + 状态栏红字提示，不再「显示运行中却一下都没发出去」
+- **关于窗口**：Tab 栏右侧的版本/作者文案改为手型可点击，弹出小窗展示版本、作者、仓库名 `key-mouse-factory`、仓库地址（可点击用浏览器打开）与软件简介
 
 ### 变更
+
+- **软件改名为「键鼠工厂」**：窗口标题、托盘/气泡、崩溃与关闭弹窗、README/CHANGELOG 全部改名；命名空间 `DnfAutoFire` → `KeyMouseFactory`，exe / 程序集 / 项目文件改为 `key-mouse-factory`，测试项目同步；数据目录回退名、单实例 Mutex、广播消息名、GitHub 仓库地址一并改为新名
 
 - **整窗渐变背景**：客户区从顶部 12% 主题色（`#E8F2FF`）线性渐变到一半高度纯白；标题栏由系统绘制、不在此范围
 - **移除页签切换过渡**：切页改为直接切换（此前的交叉淡化实际被蒙层层级问题掩盖，观感是闪烁）；Tab 下划线的滑动指示保留
@@ -130,6 +133,6 @@
 - `F6` 单键开关热键、托盘运行
 - 配置持久化（`config.json`，无写权限自动回退 `%APPDATA%`）与错误日志（`error.log`）
 
-[Unreleased]: https://github.com/wp993080086/dnf-autofire/compare/v1.2.0...HEAD
-[1.2.0]: https://github.com/wp993080086/dnf-autofire/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/wp993080086/dnf-autofire/compare/v1.0.0...v1.1.0
+[Unreleased]: https://github.com/wp993080086/key-mouse-factory/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/wp993080086/key-mouse-factory/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/wp993080086/key-mouse-factory/compare/v1.0.0...v1.1.0

@@ -194,7 +194,7 @@ ClientSize = 600 × 470
 | `MainForm.cs` | 修改 | ✅ 全部落地：Tab 化重构、按键页停止条件与键名校验、鼠标页三行与自动点击、录制页与回放行、4 个热键注册与重复校验、托盘菜单、关闭/互斥逻辑、调试入口（窗口未加高，仍是 400） |
 | `Program.cs` | 修改 | ✅ 调试参数已全部加上（`--screenshot <path> record`、`--recordtest`/`--playtest`/`--movetest`/`--keytest`） |
 | `README.md` / `CHANGELOG.md` | 修改 | ✅ 功能说明、配置示例、1.2.0 条目、录制页截图 |
-| `dnf-autofire.csproj` | 修改 | ✅ `<Version>1.2.0</Version>` |
+| `key-mouse-factory.csproj` | 修改 | ✅ `<Version>1.2.0</Version>` |
 
 `MainForm.cs` 现在已经 1500 行，录制页会再涨一截。**录制页用 partial 类分文件**（`MainForm.Record.cs`），既有页面暂不拆分（避免无谓 diff），后续可另行拆成 `MainForm.Keys.cs` / `MainForm.Mouse.cs`。
 

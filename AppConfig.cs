@@ -2,7 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>界面与配置共用的取值范围：加载配置时按同一套上下限校验，避免手改文件把非法值带进界面。</summary>
 public static class Limits

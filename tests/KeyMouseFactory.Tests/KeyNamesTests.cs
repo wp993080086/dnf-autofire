@@ -1,7 +1,7 @@
 using System.Windows.Forms;
 using Xunit;
 
-namespace DnfAutoFire.Tests;
+namespace KeyMouseFactory.Tests;
 
 public class KeyNamesTests
 {

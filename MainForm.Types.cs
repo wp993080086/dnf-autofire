@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 页内嵌套类型：按键行/鼠标行控件组、滚轮过滤器、Tab 头。
 public partial class MainForm : Form

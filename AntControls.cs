@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>Ant Design v5 设计变量（常用色值/圆角）。</summary>
 internal static class AntStyle

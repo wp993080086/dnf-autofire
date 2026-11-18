@@ -1,6 +1,6 @@
 using System.Drawing.Imaging;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 #if DEBUG
 // 调试入口：只在 Debug 构建里编译，发布版整段代码不进入程序集。
@@ -39,10 +39,58 @@ internal static partial class Program
         if (args.Length >= 2 && args[1] == "--traytest") { RunTrayTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--tabstyletest") { RunTabStyleTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--blockedtest") { RunBlockedTest(args); return true; }
+        if (args.Length >= 3 && args[1] == "--abouttest") { RunAboutTest(args); return true; }
         return false;
     }
 
-    // 调试用：dnf-autofire --blockedtest 模拟注入被拦截，验证告警链路
+    // 调试用：key-mouse-factory --abouttest <png> 离屏渲染关于弹窗并校验文案
+    private static void RunAboutTest(string[] args)
+    {
+        using var about = new AboutForm();
+        Console.WriteLine($"[about] title={about.Text}");
+        Console.WriteLine($"[about] repo={AboutForm.DebugRepoName} url={AboutForm.DebugRepoUrl}");
+        Console.WriteLine($"[about] version={Application.ProductVersion.Split('+')[0]}");
+        using (var form = new MainForm())
+            Console.WriteLine($"[about] versionLabel: {form.DebugVersionLabelInfo()}");
+
+        // 行为验证：真正触发版本标签的 Click，确认弹出关于窗口（用 timer 自动关闭模态框）
+        using var host = new MainForm();
+        host.Show();
+        var lbl = host.Controls.Find("lblVersionAbout", true).FirstOrDefault();
+        if (lbl != null)
+        {
+            var closeTimer = new System.Windows.Forms.Timer { Interval = 300 };
+            closeTimer.Tick += (_, _) =>
+            {
+                closeTimer.Stop();
+                closeTimer.Dispose();
+                var about = Application.OpenForms.Cast<Form>().FirstOrDefault(f => f is AboutForm);
+                Console.WriteLine($"[about] click->dialog: {(about != null ? "SHOWN " + about.Text : "NONE")}");
+                about?.Close();
+                host.Close();
+            };
+            closeTimer.Start();
+            // 反射调用 protected OnClick，等价于用户点击
+            var onClick = typeof(Control).GetMethod("OnClick",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            onClick?.Invoke(lbl, new object[] { EventArgs.Empty });
+            Application.Run(host);
+        }
+        about.StartPosition = FormStartPosition.Manual;
+        about.Location = new Point(-3000, -3000);
+        about.Show();
+        Application.DoEvents();
+        Thread.Sleep(200);
+        Application.DoEvents();
+        // DrawToBitmap 会把标题栏一起画进去，画布要用整个窗体的 Size 而非 ClientSize，
+        // 否则客户区内容下移一个标题栏高度、底部按钮被截掉
+        using var bmp = new Bitmap(about.Width, about.Height);
+        about.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+        bmp.Save(args[2], ImageFormat.Png);
+        about.Close();
+    }
+
+    // 调试用：key-mouse-factory --blockedtest 模拟注入被拦截，验证告警链路
     private static void RunBlockedTest(string[] args)
     {
         using var form = new MainForm();
@@ -60,7 +108,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：dnf-autofire --keycaptest 喂物理按键给键名框，验证捕获到的键名
+    // 调试用：key-mouse-factory --keycaptest 喂物理按键给键名框，验证捕获到的键名
     private static void RunKeyCapTest(string[] args)
     {
         using var form = new MainForm();
@@ -70,7 +118,7 @@ internal static partial class Program
         form.Close();
     }
 
-    // 调试用：dnf-autofire --keynametest 校验键名映射表的往返一致性、VK 唯一性与扩展键标记
+    // 调试用：key-mouse-factory --keynametest 校验键名映射表的往返一致性、VK 唯一性与扩展键标记
     private static void RunKeyNameTest(string[] args)
     {
         int total = 0, bad = 0;
@@ -114,7 +162,7 @@ internal static partial class Program
         Console.WriteLine(bad == 0 ? "[name] PASS" : $"[name] FAIL（{bad} 处异常）");
     }
 
-    // 调试用：dnf-autofire --xbuttontest 校验侧键的消息解析、注入标志与配置映射
+    // 调试用：key-mouse-factory --xbuttontest 校验侧键的消息解析、注入标志与配置映射
     private static void RunXButtonTest(string[] args)
     {
         int bad = 0;
@@ -174,7 +222,7 @@ internal static partial class Program
         Console.WriteLine(bad == 0 ? "[xb] PASS" : $"[xb] FAIL（{bad} 处异常）");
     }
 
-    // 调试用：dnf-autofire --hotkeyfallbacktest 校验备用热键的挑选规则
+    // 调试用：key-mouse-factory --hotkeyfallbacktest 校验备用热键的挑选规则
     private static void RunHotkeyFallbackTest(string[] args)
     {
         int bad = 0;
@@ -190,7 +238,7 @@ internal static partial class Program
         Console.WriteLine(bad == 0 ? "[hkf] PASS" : $"[hkf] FAIL（{bad} 处异常）");
     }
 
-    // 调试用：dnf-autofire --crashshot <png> 离屏渲染异常弹窗，检查布局与文案
+    // 调试用：key-mouse-factory --crashshot <png> 离屏渲染异常弹窗，检查布局与文案
     private static void RunCrashShot(string[] args)
     {
         using var form = new CrashReportForm("UI",
@@ -206,7 +254,7 @@ internal static partial class Program
         form.Close();
     }
 
-    // 调试用：dnf-autofire --traytest 打印托盘菜单，确认「打开日志」入口存在
+    // 调试用：key-mouse-factory --traytest 打印托盘菜单，确认「打开日志」入口存在
     private static void RunTrayTest(string[] args)
     {
         using var form = new MainForm();
@@ -216,7 +264,7 @@ internal static partial class Program
         form.Close();
     }
 
-    // 调试用：dnf-autofire --tabstyletest 读 Tab 头样式位，确认 hover 双缓冲已开启
+    // 调试用：key-mouse-factory --tabstyletest 读 Tab 头样式位，确认 hover 双缓冲已开启
     private static void RunTabStyleTest(string[] args)
     {
         using var form = new MainForm();
@@ -226,14 +274,14 @@ internal static partial class Program
         form.Close();
     }
 
-    // 调试用：dnf-autofire --logpathtest 确认日志路径与"文件不存在时先创建"的逻辑
+    // 调试用：key-mouse-factory --logpathtest 确认日志路径与"文件不存在时先创建"的逻辑
     private static void RunLogPathTest(string[] args)
     {
         string path = Logger.EnsureLogFile();
         Console.WriteLine($"[log] path={path} exists={File.Exists(path)}");
     }
 
-    // 调试用：dnf-autofire --hotkeyoccupy F6 10 强占一个热键若干秒，用来验证本程序的自动换键
+    // 调试用：key-mouse-factory --hotkeyoccupy F6 10 强占一个热键若干秒，用来验证本程序的自动换键
     private static void RunHotkeyOccupy(string[] args)
     {
         if (!int.TryParse(args[2].TrimStart('F', 'f'), out int n) || n is < 1 or > 12) return;
@@ -250,7 +298,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：dnf-autofire --instancetest listen 持锁并隐藏窗口；--instancetest notify 模拟第二份实例
+    // 调试用：key-mouse-factory --instancetest listen 持锁并隐藏窗口；--instancetest notify 模拟第二份实例
     private static void RunInstanceTest(string[] args)
     {
         if (args[2] == "notify")
@@ -273,7 +321,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --savetest <最终间隔秒> [等待毫秒]
+    // 调试用：key-mouse-factory --savetest <最终间隔秒> [等待毫秒]
     // 连改 5 次值 → 立刻读文件（应仍是旧值）→ 等防抖到期再读（应已更新）→ 设最终值后立即关窗（验证退出兜底）
     private static void RunSaveTest(string[] args)
     {
@@ -285,7 +333,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --screenshot <path.png> [新增行数] 离屏渲染窗口后退出
+    // 调试用：key-mouse-factory --screenshot <path.png> [新增行数] 离屏渲染窗口后退出
     private static void RunScreenshot(string[] args)
     {
         try
@@ -317,7 +365,7 @@ internal static partial class Program
         }
     }
 
-    // 调试用：dnf-autofire --recordtest <秒> <png> 自动开始录制、抓悬浮条、到时停止并退出
+    // 调试用：key-mouse-factory --recordtest <秒> <png> 自动开始录制、抓悬浮条、到时停止并退出
     private static void RunRecordTest(string[] args)
     {
         var form = new MainForm();
@@ -326,7 +374,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --playtest <方案名> <值> [count|infinite|duration] [最长秒数] [截图路径]
+    // 调试用：key-mouse-factory --playtest <方案名> <值> [count|infinite|duration] [最长秒数] [截图路径]
     // 按指定模式回放，到点/跑完即退出（配 DNF_DRYRUN=1 只跑时间轴不注入鼠标）
     private static void RunPlayTest(string[] args)
     {
@@ -341,7 +389,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --movetest <x> <y> 注入一次绝对定位并回报光标实际落点
+    // 调试用：key-mouse-factory --movetest <x> <y> 注入一次绝对定位并回报光标实际落点
     // （验证当前环境是否允许注入；结果与虚拟桌面范围一起写日志）
     private static void RunMoveTest(string[] args)
     {
@@ -355,7 +403,7 @@ internal static partial class Program
         Logger.Info($"[movetest] 目标={mx},{my} 注入={ok} 前={before.X},{before.Y} 后={after.X},{after.Y} 虚拟桌面={v.X},{v.Y} {v.Width}x{v.Height}");
     }
 
-    // 调试用：dnf-autofire --cursortest 光标移到几个控件上，回报「禁用=禁止 / 可点=手型」
+    // 调试用：key-mouse-factory --cursortest 光标移到几个控件上，回报「禁用=禁止 / 可点=手型」
     private static void RunCursorTest(string[] args)
     {
         var csForm = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(260, 200), TopMost = true };
@@ -366,7 +414,7 @@ internal static partial class Program
         csForm.Close();
     }
 
-    // 调试用：dnf-autofire --hotkeytest 核对热键互斥（置灰 + 硬选时回退）
+    // 调试用：key-mouse-factory --hotkeytest 核对热键互斥（置灰 + 硬选时回退）
     private static void RunHotkeyTest(string[] args)
     {
         using var hkForm = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(-3000, -3000) };
@@ -376,7 +424,7 @@ internal static partial class Program
         hkForm.Close();
     }
 
-    // 调试用：dnf-autofire --mouselayout 打印鼠标页行内控件边界
+    // 调试用：key-mouse-factory --mouselayout 打印鼠标页行内控件边界
     private static void RunMouseLayout(string[] args)
     {
         using var mf = new MainForm();
@@ -386,7 +434,7 @@ internal static partial class Program
         mf.Close();
     }
 
-    // 调试用：dnf-autofire --mousetest <秒数> 自动开启鼠标连点，数秒后关闭退出（真机验证连点/自动点击收尾）
+    // 调试用：key-mouse-factory --mousetest <秒数> 自动开启鼠标连点，数秒后关闭退出（真机验证连点/自动点击收尾）
     private static void RunMouseTest(string[] args)
     {
         var form = new MainForm();
@@ -395,7 +443,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --uitest <prefix> 窗口可见状态下切换按钮状态并抓图，验证自绘控件重绘
+    // 调试用：key-mouse-factory --uitest <prefix> 窗口可见状态下切换按钮状态并抓图，验证自绘控件重绘
     private static void RunUiTest(string[] args)
     {
         var form = new MainForm();
@@ -404,7 +452,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：dnf-autofire --enginetest <A|B> <秒数> 自动开启连发引擎，数秒后自动关闭退出（真机验证连发行为）
+    // 调试用：key-mouse-factory --enginetest <A|B> <秒数> 自动开启连发引擎，数秒后自动关闭退出（真机验证连发行为）
     private static void RunEngineTest(string[] args)
     {
         var form = new MainForm();
@@ -414,7 +462,7 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --focustest 复现「清焦点 → 最小化 → 还原」后的焦点归属
+    // 调试用：key-mouse-factory --focustest 复现「清焦点 → 最小化 → 还原」后的焦点归属
     private static void RunFocusTest(string[] args)
     {
         var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };
@@ -443,7 +491,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：dnf-autofire --keytest 跑一遍「开启连发」前的键名校验并打印结果
+    // 调试用：key-mouse-factory --keytest 跑一遍「开启连发」前的键名校验并打印结果
     private static void RunKeyTest(string[] args)
     {
         using var ktForm = new MainForm();
@@ -453,7 +501,7 @@ internal static partial class Program
         ktForm.Close();
     }
 
-    // 调试用：dnf-autofire --seltest 模拟点击第二个方案，验证单选切换不会无限递归
+    // 调试用：key-mouse-factory --seltest 模拟点击第二个方案，验证单选切换不会无限递归
     private static void RunSelectionTest(string[] args)
     {
         var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(-3000, -3000) };
@@ -464,7 +512,7 @@ internal static partial class Program
         form.Close();
     }
 
-    // 调试用：dnf-autofire --playoverlaytest <png> [第几次] [总次数] 离屏渲染回放状态条并截图
+    // 调试用：key-mouse-factory --playoverlaytest <png> [第几次] [总次数] 离屏渲染回放状态条并截图
     private static void RunPlayOverlayTest(string[] args)
     {
         int loop = args.Length >= 4 && int.TryParse(args[3], out int lp) ? lp : 2;
@@ -485,7 +533,7 @@ internal static partial class Program
         ov.Close();
     }
 
-    // 调试用：dnf-autofire --closetest <png> [busy] 渲染「关闭还是最小化」询问框并截图
+    // 调试用：key-mouse-factory --closetest <png> [busy] 渲染「关闭还是最小化」询问框并截图
     private static void RunCloseTest(string[] args)
     {
         using var dlg = new ClosePromptForm(args.Length >= 4 && args[3] == "busy");
@@ -501,7 +549,7 @@ internal static partial class Program
         dlg.Close();
     }
 
-    // 调试用：dnf-autofire --xclosetest <prefix> 模拟点 X：询问框出现 → 选「最小化」→ 再点 X → 选「退出」
+    // 调试用：key-mouse-factory --xclosetest <prefix> 模拟点 X：询问框出现 → 选「最小化」→ 再点 X → 选「退出」
     private static void RunXCloseTest(string[] args)
     {
         var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };

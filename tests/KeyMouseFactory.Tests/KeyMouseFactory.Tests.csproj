@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <RootNamespace>DnfAutoFire.Tests</RootNamespace>
+    <RootNamespace>KeyMouseFactory.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../dnf-autofire.csproj" />
+    <ProjectReference Include="../../key-mouse-factory.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 按键页：连发引擎启停与目标收集、按键配置行的构建与行内编辑。
 public partial class MainForm : Form
@@ -48,7 +48,7 @@ public partial class MainForm : Form
         string autoDesc = string.Join("、", targets
             .Where(t => t.Mode == AutoFireEngine.TriggerMode.Auto)
             .Select(t => t.Count <= 0 ? "自动连按(无限)" : $"自动连按({t.Count} 次)"));
-        trayIcon.ShowBalloonTip(1800, "DNF 连发",
+        trayIcon.ShowBalloonTip(1800, "键鼠工厂",
             $"已开启连发（{targets.Count} 个目标键）{(autoDesc.Length > 0 ? "\n" + autoDesc : "")}\n最小化到托盘，按 {_config.StartHotkey} 或托盘菜单可关闭。",
             ToolTipIcon.Info);
     }
@@ -108,7 +108,7 @@ public partial class MainForm : Form
         RefreshRunCard();
         // 窗口本就可见 → 只刷新状态，不抢焦点；隐藏时用托盘气泡告知
         if (Visible) return;
-        trayIcon.ShowBalloonTip(1500, "DNF 连发", "连发已关闭。", ToolTipIcon.Info);
+        trayIcon.ShowBalloonTip(1500, "键鼠工厂", "连发已关闭。", ToolTipIcon.Info);
     }
 
     /// <summary>自动连按把设定次数跑完：引擎已经自行退出，这里把界面拉回停止态。</summary>
@@ -119,7 +119,7 @@ public partial class MainForm : Form
         Logger.Info("自动连按已完成设定次数，引擎自动关闭");
         SetKeysUiLocked(false);
         RefreshRunCard();
-        trayIcon.ShowBalloonTip(1600, "DNF 连发", "自动连按已完成设定次数，已自动关闭。", ToolTipIcon.Info);
+        trayIcon.ShowBalloonTip(1600, "键鼠工厂", "自动连按已完成设定次数，已自动关闭。", ToolTipIcon.Info);
     }
 
     private void AddRow(string key, int ms, bool enabled, string stopMode = "hold", int stopValue = 0)

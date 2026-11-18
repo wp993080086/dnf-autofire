@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 回放状态浮条：回放期间主窗口收进托盘，屏幕右下角留一条只读提示

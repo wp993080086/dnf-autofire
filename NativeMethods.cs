@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 internal static class NativeMethods
 {

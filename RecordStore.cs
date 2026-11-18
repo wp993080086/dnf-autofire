@@ -2,7 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>录制点：t=相对开始的毫秒，k=事件类型，x/y=物理屏幕坐标。</summary>
 public struct RecordPoint

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>回放模式：回放 N 次 / 一直放 / 定时 N 分钟。</summary>
 internal enum PlayMode { Count, Infinite, Duration }

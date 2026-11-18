@@ -1,7 +1,7 @@
 #if DEBUG
 using System.Diagnostics;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 调试用采样器：DryRun 模式下把每次注入的时间戳记下来，引擎停止时打印间隔统计。

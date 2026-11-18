@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 低级鼠标钩子。只监听物理鼠标事件（过滤程序自身注入的），

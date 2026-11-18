@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // MainForm 主体：字段与常量、构造函数、窗口生命周期、配置读写、托盘、状态刷新。
 // 其余功能拆分在同名 partial 文件：Ui / Hotkey / Keys / Mouse / Record / Debug / Types。
@@ -124,7 +124,7 @@ public partial class MainForm : Form
         Icon = _appIcon;
 
         Font = AntStyle.GetFont(9f);
-        Text = "DNF 连发工具";
+        Text = "键鼠工厂";
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -287,7 +287,7 @@ public partial class MainForm : Form
                 if (IsDisposed) return;
                 RefreshStatus();
                 UpdateTrayText();
-                trayIcon.ShowBalloonTip(3600, $"DNF 连发 · {what}被系统拦截",
+                trayIcon.ShowBalloonTip(3600, $"键鼠工厂 · {what}被系统拦截",
                     "按键/点击没有真正发出去。请以管理员身份运行本程序；若游戏以更高权限启动则无法注入。",
                     ToolTipIcon.Warning);
             }));
@@ -338,7 +338,7 @@ public partial class MainForm : Form
     {
         Hide();
         if (_engine.Running || _mouseEngine.Running || _recorder != null || _player != null)
-            trayIcon.ShowBalloonTip(1600, "DNF 连发",
+            trayIcon.ShowBalloonTip(1600, "键鼠工厂",
                 "仍在后台运行，双击托盘图标可重新打开。", ToolTipIcon.Info);
     }
 
@@ -541,7 +541,7 @@ public partial class MainForm : Form
         trayIcon = new NotifyIcon
         {
             Icon = _appIcon,
-            Text = "DNF 连发",
+            Text = "键鼠工厂",
             Visible = true,
             ContextMenuStrip = trayMenu
         };

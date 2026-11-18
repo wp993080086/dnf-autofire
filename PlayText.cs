@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>回放进度文案：从界面里抽出的纯函数，便于单测覆盖边界值。</summary>
 internal static class PlayText

@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 界面骨架与通用绘制：BuildUi、三个页面构建、Tab 绘制与动画、页内排版工具。
 public partial class MainForm : Form
@@ -51,16 +51,24 @@ public partial class MainForm : Form
         tabHeader.MouseMove += TabHeader_Move;
         tabHeader.MouseLeave += (_, _) => { if (_tabHover != -1) { _tabHover = -1; tabHeader.Invalidate(); } };
 
-        // Tab 栏右侧空白处：小号浅灰的版本号与作者（版本随 csproj 自动更新）
+        // Tab 栏右侧空白处：小号浅灰的版本号与作者，可点击弹出关于窗口
         var lblVersion = new Label
         {
+            Name = "lblVersionAbout",
             // ProductVersion 形如 "1.1.0+<commit>"，只取主版本号
             Text = $"v{Application.ProductVersion.Split('+')[0]} · 鹏多多",
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
             Font = AntStyle.GetFont(8f),
             BackColor = Color.Transparent,
-            Enabled = false // 纯展示，不响应鼠标（事件穿透到 tabHeader）
+            Cursor = Cursors.Hand
+        };
+        // 点版本/作者不误切 Tab：Label 在三个页签矩形之外，HitTab 返回 -1；
+        // MouseClick 不冒泡到 tabHeader，这里直接弹关于窗口
+        lblVersion.Click += (_, _) =>
+        {
+            using var about = new AboutForm();
+            about.ShowDialog(this);
         };
         tabHeader.Controls.Add(lblVersion);
         lblVersion.Location = new Point(tabHeader.Width - lblVersion.Width - 16, (44 - lblVersion.Height) / 2);

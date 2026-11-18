@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>热键占用时的纯逻辑：在 F1–F12 里挑一个还没被占用的键。</summary>
 internal static class HotkeyFallback
@@ -34,7 +34,7 @@ internal static class HotkeyFallback
 /// <summary>单实例互相唤起用的 Win32 消息。</summary>
 internal static class SingleInstanceSignal
 {
-    private const string MessageName = "DnfAutoFire_ShowWindow_v1";
+    private const string MessageName = "KeyMouseFactory_ShowWindow_v1";
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint RegisterWindowMessage(string name);

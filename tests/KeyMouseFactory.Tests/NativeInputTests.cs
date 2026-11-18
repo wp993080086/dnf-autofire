@@ -1,7 +1,7 @@
 using System.Drawing;
 using Xunit;
 
-namespace DnfAutoFire.Tests;
+namespace KeyMouseFactory.Tests;
 
 public class NativeInputTests
 {

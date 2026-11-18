@@ -6,8 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>dnf-autofire</AssemblyName>
-    <RootNamespace>DnfAutoFire</RootNamespace>
+    <AssemblyName>key-mouse-factory</AssemblyName>
+    <RootNamespace>KeyMouseFactory</RootNamespace>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <!-- 纯逻辑单测要访问 internal 的键名映射、配置合并与纯函数 -->
-    <InternalsVisibleTo Include="DnfAutoFire.Tests" />
+    <InternalsVisibleTo Include="KeyMouseFactory.Tests" />
   </ItemGroup>
 
   <ItemGroup>

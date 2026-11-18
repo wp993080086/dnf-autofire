@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 连发目标键的键名 ↔ 虚拟键码映射。键名是界面与配置文件共用的唯一表示：

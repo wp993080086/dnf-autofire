@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 录制与回放：方案列表、录制引擎、回放引擎与状态条。
 public partial class MainForm : Form
@@ -488,11 +488,11 @@ public partial class MainForm : Form
     {
         if (trayIcon == null) return;
         string text =
-            _recorder != null ? "DNF 连发 · 录制中"
-            : _player != null ? progress ?? "DNF 连发 · 回放中"
-            : _engine.InjectBlocked || _mouseEngine.InjectBlocked ? "DNF 连发 · 注入被拦截，请管理员运行"
-            : _engine.Running || _mouseEngine.Running ? "DNF 连发 · 运行中"
-            : "DNF 连发";
+            _recorder != null ? "键鼠工厂 · 录制中"
+            : _player != null ? progress ?? "键鼠工厂 · 回放中"
+            : _engine.InjectBlocked || _mouseEngine.InjectBlocked ? "键鼠工厂 · 注入被拦截，请管理员运行"
+            : _engine.Running || _mouseEngine.Running ? "键鼠工厂 · 运行中"
+            : "键鼠工厂";
         if (text.Length > 60) text = text[..60];
         trayIcon.Text = text;
     }
@@ -537,7 +537,7 @@ public partial class MainForm : Form
             ? "回放中 · 注入被系统拦截，请以管理员运行"
             : $"回放中 {p.ProfileName} · 第 {loop} 次 · {FormatDuration(p.ElapsedMs)}";
         _playOverlay?.UpdateProgress(loop, p.ElapsedMs, p.InjectBlocked);
-        UpdateTrayText($"DNF 连发 · 回放 {p.ProfileName} 第 {loop} 次 {FormatDuration(p.ElapsedMs)}");
+        UpdateTrayText($"键鼠工厂 · 回放 {p.ProfileName} 第 {loop} 次 {FormatDuration(p.ElapsedMs)}");
     }
 
     private void TogglePlayback()

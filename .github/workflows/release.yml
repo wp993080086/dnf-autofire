@@ -22,14 +22,14 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Run unit tests
-        run: dotnet test tests/DnfAutoFire.Tests/DnfAutoFire.Tests.csproj -c Release
+        run: dotnet test tests/KeyMouseFactory.Tests/KeyMouseFactory.Tests.csproj -c Release
 
       - name: Publish single-file exe
         run: dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 
-      # 附件统一叫 dnf-autofire.exe：版本信息由 Release 页面与 tag 承载，不在文件名重复
+      # 附件统一叫 key-mouse-factory.exe：版本信息由 Release 页面与 tag 承载，不在文件名重复
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: bin/Release/net8.0-windows/win-x64/publish/dnf-autofire.exe
+          files: bin/Release/net8.0-windows/win-x64/publish/key-mouse-factory.exe
           generate_release_notes: true

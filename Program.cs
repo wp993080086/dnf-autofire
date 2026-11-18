@@ -1,8 +1,8 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 internal static partial class Program
 {
-    internal const string SingleInstanceName = "DnfAutoFire_SingleInstance";
+    internal const string SingleInstanceName = "KeyMouseFactory_SingleInstance";
 
     [STAThread]
     private static void Main()

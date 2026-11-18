@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 #if DEBUG
 // 调试入口：只由 Program.Debug.cs 的调试命令行调用，Release 构建里不参与编译。
@@ -404,6 +404,15 @@ public partial class MainForm : Form
 
     /// <summary>调试入口：--screenshot 模拟新增行。</summary>
     internal void DebugAddEmptyRow() => AddEmptyRow();
+
+    /// <summary>调试入口：--abouttest 检查 Tab 栏版本/作者标签是否手型、可点击、文案正确。</summary>
+    internal string DebugVersionLabelInfo()
+    {
+        var lbl = tabHeader.Controls.Find("lblVersionAbout", false).FirstOrDefault() as Label;
+        if (lbl == null) return "NOT_FOUND";
+        string cursor = lbl.Cursor == Cursors.Hand ? "Hand" : "Other";
+        return $"text={lbl.Text} cursor={cursor} enabled={lbl.Enabled}";
+    }
 
     /// <summary>调试入口：--screenshot … mouse 切到鼠标 Tab 再截图。</summary>
     internal void DebugShowMouseTab() => DebugShowTab(TabMouse);

@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 轻量错误日志：写入 exe 同目录 error.log。

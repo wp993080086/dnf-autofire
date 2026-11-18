@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 录制状态悬浮条：主窗口收进托盘后，屏幕上留一条小的置顶提示。

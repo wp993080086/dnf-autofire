@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 /// <summary>
 /// 未处理异常的提示窗：异常摘要 + 完整详情，并提供打开日志与复制详情两个出口。
@@ -29,7 +29,7 @@ internal sealed class CrashReportForm : Form
 
         Controls.Add(new Label
         {
-            Text = "DNF 连发捕获到一个未处理异常",
+            Text = "键鼠工厂捕获到一个未处理异常",
             Location = new Point(20, 16),
             AutoSize = true,
             Font = _titleFont,

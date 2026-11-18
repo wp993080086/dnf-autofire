@@ -1,4 +1,4 @@
-namespace DnfAutoFire;
+namespace KeyMouseFactory;
 
 // 热键槽位：注册注销、跨页互斥置灰、冲突回退、热键下拉构建。
 public partial class MainForm : Form

@@ -28,7 +28,7 @@ public partial class MainForm : Form
 
             default: // TabKeys
                 lblTarget.Text = "当前控制：连按";
-                btnMain.Text = _engine.Running ? "关闭连发" : "开启连发";
+                btnMain.Text = _engine.Running ? "关闭连按" : "开启连按";
                 btnMain.Enabled = true;
                 btnMain.Danger = _engine.Running;
                 break;
@@ -102,7 +102,7 @@ public partial class MainForm : Form
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
-            Text = "开启连发",
+            Text = "开启连按",
             Location = new Point(14, 6),
             Size = new Size(366, 40),
             Font = AntStyle.GetFont(10f)
@@ -149,21 +149,21 @@ public partial class MainForm : Form
         pnlRun.Controls.Add(lblStatus);
         Controls.Add(pnlRun);
 
-        // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
+        // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连按热键（默认 F6）、
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效。
         // 分隔线右移后只剩 240 宽：标签 14 起、下拉 86 起 120 宽，右侧仍留 34 的余量给说明文字
         var pnlSet = new AntPanel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.Transparent };
-        lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
-        lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
+        lblHotkey = new Label { Text = "连按热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
+        lblMode = new Label { Text = "连按模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
         cboStartKey = MakeHotkeySelect(new Point(86, 8));
         cboMode = new AntSelect { Location = new Point(86, 40), Width = 120 };
         cboMode.Inner.DropDownWidth = 120;
         cboMode.Inner.Items.Add("保留原生");
         cboMode.Inner.Items.Add("拦截原生");
-        cboMode.SelectedIndex = 1; // 默认拦截原生：物理按键不进游戏，避免和模拟连发打架
+        cboMode.SelectedIndex = 1; // 默认拦截原生：物理按键不进游戏，避免和模拟连按打架
 
-        // 录制页第二行：回放热键（与"连发模式"同位置，按 Tab 二选一显示）
+        // 录制页第二行：回放热键（与"连按模式"同位置，按 Tab 二选一显示）
         cboPlayKey = MakeHotkeySelect(new Point(86, 40));
         cboPlayKey.Visible = false;
 

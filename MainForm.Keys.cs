@@ -1,6 +1,6 @@
 namespace KeyMouseFactory;
 
-// 按键页：连发引擎启停与目标收集、按键配置行的构建与行内编辑。
+// 按键页：连按引擎启停与目标收集、按键配置行的构建与行内编辑。
 public partial class MainForm : Form
 {
     // ---------- 启动 / 停止 ----------
@@ -23,7 +23,7 @@ public partial class MainForm : Form
         if (targets.Count == 0)
         {
             ShowWindow();
-            MessageBox.Show("没有可连发的按键：请至少勾选一行并填写键名。", "提示",
+            MessageBox.Show("没有可连按的按键：请至少勾选一行并填写键名。", "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -49,7 +49,7 @@ public partial class MainForm : Form
             .Where(t => t.Mode == AutoFireEngine.TriggerMode.Auto)
             .Select(t => t.Count <= 0 ? "自动连按(无限)" : $"自动连按({t.Count} 次)"));
         trayIcon.ShowBalloonTip(1800, "键鼠工厂",
-            $"已开启连发（{targets.Count} 个目标键）{(autoDesc.Length > 0 ? "\n" + autoDesc : "")}\n最小化到托盘，按 {_config.StartHotkey} 或托盘菜单可关闭。",
+            $"已开启连按（{targets.Count} 个目标键）{(autoDesc.Length > 0 ? "\n" + autoDesc : "")}\n最小化到托盘，按 {_config.StartHotkey} 或托盘菜单可关闭。",
             ToolTipIcon.Info);
     }
 
@@ -103,12 +103,12 @@ public partial class MainForm : Form
     private void DoStop()
     {
         _engine.Stop();
-        Logger.Info("关闭连发");
+        Logger.Info("关闭连按");
         SetKeysUiLocked(false);
         RefreshRunCard();
         // 窗口本就可见 → 只刷新状态，不抢焦点；隐藏时用托盘气泡告知
         if (Visible) return;
-        trayIcon.ShowBalloonTip(1500, "键鼠工厂", "连发已关闭。", ToolTipIcon.Info);
+        trayIcon.ShowBalloonTip(1500, "键鼠工厂", "连按已关闭。", ToolTipIcon.Info);
     }
 
     /// <summary>自动连按把设定次数跑完：引擎已经自行退出，这里把界面拉回停止态。</summary>

@@ -31,7 +31,7 @@ internal static class EngineProbe
         foreach (var l in _up) l.Clear();
     }
 
-    /// <summary>打印按下之间的间隔统计（一次点击 = 按下→抬起，所以按下到按下就是实际连发周期）。</summary>
+    /// <summary>打印按下之间的间隔统计（一次点击 = 按下→抬起，所以按下到按下就是实际连按周期）。</summary>
     public static void Report(int channel, string tag)
     {
         var downs = _down[channel];

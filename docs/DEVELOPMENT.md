@@ -49,7 +49,7 @@ CI 在发布前会先以 Release 配置跑一遍测试，测试不通过就不�
 | `--hotkeyoccupy <F键> <秒>` | 在独立进程里强占一个热键若干秒，用来验证本程序的自动换键 |
 | `--instancetest listen\|notify` | `listen` 持单实例锁并隐藏窗口；`notify` 从另一个进程发广播，验证窗口会被叫到前台 |
 | `--enginetest <A\|B> <秒>` | 按当前配置开启连按，数秒后关闭（配 `KEYMOUSE_DRYRUN=1` 只跑调度） |
-| `--keytest` | 打印配置里收集到的连发目标键名与 VK |
+| `--keytest` | 打印配置里收集到的连按目标键名与 VK |
 | `--keynametest` | 校验键名 ↔ VK 映射的往返一致性、唯一性与非法值拒绝 |
 | `--keycaptest` | 喂物理按键给键名框，验证捕获与不拦截规则 |
 | `--xbuttontest` | 校验 X1/X2 侧键的消息解析、注入标志、配置映射与默认行 |

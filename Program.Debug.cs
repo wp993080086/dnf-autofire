@@ -459,7 +459,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：key-mouse-factory --enginetest <A|B> <秒数> 自动开启连发引擎，数秒后自动关闭退出（真机验证连发行为）
+    // 调试用：key-mouse-factory --enginetest <A|B> <秒数> 自动开启连按引擎，数秒后自动关闭退出（真机验证连按行为）
     private static void RunEngineTest(string[] args)
     {
         var form = new MainForm();
@@ -498,7 +498,7 @@ internal static partial class Program
         Application.Run();
     }
 
-    // 调试用：key-mouse-factory --keytest 跑一遍「开启连发」前的键名校验并打印结果
+    // 调试用：key-mouse-factory --keytest 跑一遍「开启连按」前的键名校验并打印结果
     private static void RunKeyTest(string[] args)
     {
         using var ktForm = new MainForm();

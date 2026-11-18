@@ -12,7 +12,7 @@ public partial class MainForm : Form
         // 否则后一个 RegisterHotKey 必然失败，会被误报成"被其他程序占用"。
         var defs = new (int Id, string Name, string Key, Action<string> Set)[]
         {
-            (HOTKEY_ID_START, "连发", _config.StartHotkey, k => _config.StartHotkey = k),
+            (HOTKEY_ID_START, "连按", _config.StartHotkey, k => _config.StartHotkey = k),
             (HOTKEY_ID_MOUSE, "连点", _config.MouseStartHotkey, k => _config.MouseStartHotkey = k),
             (HOTKEY_ID_RECORD, "录制", _config.RecordHotkey, k => _config.RecordHotkey = k),
             (HOTKEY_ID_PLAY, "回放", _config.PlaybackHotkey, k => _config.PlaybackHotkey = k)
@@ -90,7 +90,7 @@ public partial class MainForm : Form
     }
 
     /// <summary>
-    /// 设置卡片跟随当前 Tab：按键页=连发热键 + 连发模式 + 键盘提示；
+    /// 设置卡片跟随当前 Tab：按键页=连按热键 + 连按模式 + 键盘提示；
     /// 鼠标页=连点热键 + 鼠标提示（无模式概念）；录制页=录制热键 + 录制提示。
     /// </summary>
     private void SyncHotkeyUI()
@@ -102,7 +102,7 @@ public partial class MainForm : Form
         bool locked = _recorder != null || _player != null
                       || (mouse ? _mouseEngine.Running : _engine.Running);
 
-        lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连发热键";
+        lblHotkey.Text = record ? "录制热键" : mouse ? "连点热键" : "连按热键";
         _hotkeySyncing = true;
         cboStartKey.Text = record ? _config.RecordHotkey : mouse ? _config.MouseStartHotkey : _config.StartHotkey;
         cboPlayKey.Text = _config.PlaybackHotkey;
@@ -110,8 +110,8 @@ public partial class MainForm : Form
         cboPlayKey.Enabled = !locked;
         _hotkeySyncing = false;
 
-        // 第二行：按键页=连发模式，录制页=回放热键，鼠标页没有这一行
-        lblMode.Text = record ? "回放热键" : "连发模式";
+        // 第二行：按键页=连按模式，录制页=回放热键，鼠标页没有这一行
+        lblMode.Text = record ? "回放热键" : "连按模式";
         lblMode.Visible = !mouse;
         cboMode.Visible = !mouse && !record;
         cboPlayKey.Visible = record;
@@ -193,12 +193,12 @@ public partial class MainForm : Form
     /// <summary>四个热键槽位：界面标签名 + 当前生效值（界面上按 Tab 只显示其中一到两个）。</summary>
     private (string Name, string Key)[] HotkeySlots() => new[]
     {
-        ("连发热键", _config.StartHotkey),
+        ("连按热键", _config.StartHotkey),
         ("连点热键", _config.MouseStartHotkey),
         ("录制热键", _config.RecordHotkey),
         ("回放热键", _config.PlaybackHotkey)
     };
 
-    /// <summary>「连发/连点/录制」那个热键下拉框当前对应哪个槽位（跟着 Tab 走）。</summary>
-    private string StartKeySlot() => _tabIndex == TabRecord ? "录制热键" : _tabIndex == TabMouse ? "连点热键" : "连发热键";
+    /// <summary>「连按/连点/录制」那个热键下拉框当前对应哪个槽位（跟着 Tab 走）。</summary>
+    private string StartKeySlot() => _tabIndex == TabRecord ? "录制热键" : _tabIndex == TabMouse ? "连点热键" : "连按热键";
 }

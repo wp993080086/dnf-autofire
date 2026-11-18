@@ -36,7 +36,7 @@ internal sealed class ClosePromptForm : Form
         var lblBody = new Label
         {
             Text = busy
-                ? "当前有任务在运行：退出会立即停止连发、连点或录制回放。\r\n最小化到托盘后程序继续在后台运行，双击托盘图标可再打开。"
+                ? "当前有任务在运行：退出会立即停止连按、连点或录制回放。\r\n最小化到托盘后程序继续在后台运行，双击托盘图标可再打开。"
                 : "退出会关闭程序；最小化到托盘后程序继续在后台运行。\r\n双击托盘图标可随时把窗口打开。",
             Location = new Point(20, 54),
             Size = new Size(356, 46),

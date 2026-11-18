@@ -16,7 +16,7 @@ internal static partial class Program
         if (TryRunDebugCommand(Environment.GetCommandLineArgs())) return;
 #endif
 
-        // 单实例保护：双开会导致热键冲突与双重连发。
+        // 单实例保护：双开会导致热键冲突与双重连按。
         // 第二份实例不再只弹提示，而是广播一条注册消息让已运行的实例把窗口叫到前台。
         using var mutex = new Mutex(true, SingleInstanceName, out bool createdNew);
         if (!createdNew)

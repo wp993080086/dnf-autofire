@@ -1,11 +1,11 @@
 namespace KeyMouseFactory;
 
 /// <summary>
-/// 连发目标键的键名 ↔ 虚拟键码映射。键名是界面与配置文件共用的唯一表示：
+/// 连按目标键的键名 ↔ 虚拟键码映射。键名是界面与配置文件共用的唯一表示：
 /// A-Z、0-9 与符号键直接用字符本身，空格用 SPC，小键盘数字用 N0-N9。
 /// 只收录游戏里真正会当技能键用的键位——功能键、编辑键、方向键都不收录：
-/// F 键与热键抢同一批键，方向键与编辑键在游戏里没有连发价值，还会把光标导航一并吃掉。
-/// 修饰键同理不收录（连发无意义，且「拦截原生」会把系统 Shift/Ctrl 一起拦掉）。
+/// F 键与热键抢同一批键，方向键与编辑键在游戏里没有连按价值，还会把光标导航一并吃掉。
+/// 修饰键同理不收录（连按无意义，且「拦截原生」会把系统 Shift/Ctrl 一起拦掉）。
 /// </summary>
 internal static class KeyNames
 {
@@ -72,7 +72,7 @@ internal static class KeyNames
         return Named.TryGetValue(s, out int vk) ? vk : -1;
     }
 
-    /// <summary>物理按键 → 规范键名；null 表示这个键不支持作为连发目标。</summary>
+    /// <summary>物理按键 → 规范键名；null 表示这个键不支持作为连按目标。</summary>
     public static string? FromKeys(Keys key)
     {
         int vk = (int)(key & Keys.KeyCode);

@@ -34,7 +34,7 @@ public partial class MainForm : Form
     {
         // 先看启动态（按键页，没切过 Tab）——这里是「下拉里没置灰」问题的现场
         Console.WriteLine("[hotkeytest] 启动态（按键页，未切 Tab）：");
-        Dump("连发热键", cboStartKey);
+        Dump("连按热键", cboStartKey);
         Dump("回放热键", cboPlayKey);
 
         DebugShowTab(TabRecord);
@@ -48,7 +48,7 @@ public partial class MainForm : Form
             Console.WriteLine($"[hotkeytest] {name}：当前={sel.Text} 置灰=[{string.Join(",", blocked)}]");
         }
 
-        Console.WriteLine($"[hotkeytest] 配置：连发={_config.StartHotkey} 连点={_config.MouseStartHotkey} "
+        Console.WriteLine($"[hotkeytest] 配置：连按={_config.StartHotkey} 连点={_config.MouseStartHotkey} "
             + $"录制={_config.RecordHotkey} 回放={_config.PlaybackHotkey}");
         Dump("录制热键", cboStartKey);
         Dump("回放热键", cboPlayKey);
@@ -63,7 +63,7 @@ public partial class MainForm : Form
         }
 
         string before = cboStartKey.Text;
-        Console.WriteLine($"[hotkeytest] 硬选「连发热键」在用的 {_config.StartHotkey} → 结果={TrySelect(cboStartKey, _config.StartHotkey)}（应退回 {before}）");
+        Console.WriteLine($"[hotkeytest] 硬选「连按热键」在用的 {_config.StartHotkey} → 结果={TrySelect(cboStartKey, _config.StartHotkey)}（应退回 {before}）");
         Console.WriteLine($"[hotkeytest] 选空闲键 F5 → 结果={TrySelect(cboStartKey, "F5")}（应为 F5，且此时回放热键的 F5 应置灰）");
         Dump("回放热键(选完 F5)", cboPlayKey);
         Console.WriteLine($"[hotkeytest] 选回 {before} → 结果={TrySelect(cboStartKey, before)}");
@@ -106,7 +106,7 @@ public partial class MainForm : Form
         Console.WriteLine("[cursortest] —— 按键页");
         foreach (var line in new[]
         {
-            Probe(btnMain, "主按钮(开启连发)"),
+            Probe(btnMain, "主按钮(开启连按)"),
             Probe(_rows[0].Chk, "启用复选框"),
             Probe(_rows[0].TxtKey, "键名输入框"),
             Probe(_rows[0].TxtMs, "间隔数字框(文本区)"),
@@ -146,13 +146,13 @@ public partial class MainForm : Form
             return $"{label}[{item}] {(sel.IsBlocked(item) ? "置灰" : "可选")}: → {cur}";
         }
 
-        Console.WriteLine("[cursortest] —— 按键页：展开「连发热键」下拉");
+        Console.WriteLine("[cursortest] —— 按键页：展开「连按热键」下拉");
         foreach (var line in new[]
         {
-            ProbeItem(cboStartKey, "连发热键", "F9"),   // 被录制热键占用 → 置灰
-            ProbeItem(cboStartKey, "连发热键", "F8"),   // 被连点热键占用 → 置灰
-            ProbeItem(cboStartKey, "连发热键", "F1"),   // 空闲 → 手型
-            ProbeItem(cboStartKey, "连发热键", "F12")   // 空闲 → 手型
+            ProbeItem(cboStartKey, "连按热键", "F9"),   // 被录制热键占用 → 置灰
+            ProbeItem(cboStartKey, "连按热键", "F8"),   // 被连点热键占用 → 置灰
+            ProbeItem(cboStartKey, "连按热键", "F1"),   // 空闲 → 手型
+            ProbeItem(cboStartKey, "连按热键", "F12")   // 空闲 → 手型
         })
             Console.WriteLine("[cursortest] " + line);
         cboStartKey.Inner.DroppedDown = false;
@@ -163,7 +163,7 @@ public partial class MainForm : Form
         Console.WriteLine("[cursortest] —— 鼠标页：展开「连点热键」下拉");
         foreach (var line in new[]
         {
-            ProbeItem(cboStartKey, "连点热键", "F6"),  // 被连发热键占用 → 置灰
+            ProbeItem(cboStartKey, "连点热键", "F6"),  // 被连按热键占用 → 置灰
             ProbeItem(cboStartKey, "连点热键", "F2")   // 空闲 → 手型
         })
             Console.WriteLine("[cursortest] " + line);
@@ -221,7 +221,7 @@ public partial class MainForm : Form
         return $"OK targets={targets.Count} vks=[{string.Join(", ", targets.Select(t => "0x" + t.Vk.ToString("X2")))}]";
     }
 
-    /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连发引擎（默认配置行），数秒后自动关闭退出。</summary>
+    /// <summary>调试入口：--enginetest &lt;A|B&gt; &lt;秒&gt;。窗口显示后自动开启连按引擎（默认配置行），数秒后自动关闭退出。</summary>
     internal void DebugEngineTest(string mode, int seconds)
     {
         cboMode.SelectedIndex = mode == "A" ? 0 : 1;
@@ -370,14 +370,14 @@ public partial class MainForm : Form
             {
                 case 1: // 模拟 DoStart 的 UI 更新（不隐藏窗口）
                     SetKeysUiLocked(true);
-                    btnMain.Text = "关闭连发";
+                    btnMain.Text = "关闭连按";
                     btnMain.Danger = true;
                     UpdateStatus("运行中 · 测试");
                     break;
                 case 2: // 确认运行态已上屏，随后模拟 DoStop 的 UI 更新（窗口可见 = 用户反馈的场景）
                     CaptureWindow(prefix + "_running.png");
                     SetKeysUiLocked(false);
-                    btnMain.Text = "开启连发";
+                    btnMain.Text = "开启连按";
                     btnMain.Danger = false;
                     UpdateStatus("未开启");
                     break;

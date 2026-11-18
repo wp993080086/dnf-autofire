@@ -4,16 +4,16 @@ using System.Runtime.InteropServices;
 namespace KeyMouseFactory;
 
 /// <summary>
-/// 连发引擎：独立高精度线程按 Stopwatch 调度。
+/// 连按引擎：独立高精度线程按 Stopwatch 调度。
 /// 这类游戏按帧轮询键盘状态、以「上帧未按下→本帧按下」的边沿触发攻击：
 /// 按住不放只算一次，按下/抬起窗口短于 1 帧又会被整段错过。
 /// 因此调度上强制「按下保持 ≥20ms、抬起 ≥20ms」，有效间隔下限 40ms（60 帧游戏）。
-/// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
+/// 模式 A：放行原生按键，叠加模拟连按；模式 B：拦截原生按键，仅程序模拟（默认）。
 /// 工作线程没有「固定节拍」：按每个键的到期时刻等待，没人按键时阻塞在事件上零唤醒。
 /// </summary>
 internal sealed class AutoFireEngine
 {
-    /// <summary>触发方式：Hold=物理按住才连发、松手即停；Auto=启动后自动连发，不需要按住。</summary>
+    /// <summary>触发方式：Hold=物理按住才连按、松手即停；Auto=启动后自动连按，不需要按住。</summary>
     public enum TriggerMode { Hold, Auto }
 
     /// <summary>一个目标键：间隔毫秒 + 触发方式 + 自动模式下的次数（0 = 无限）。</summary>
@@ -43,7 +43,7 @@ internal sealed class AutoFireEngine
 #if DEBUG
     internal static readonly bool DryRun = Environment.GetEnvironmentVariable("KEYMOUSE_DRYRUN") == "1";
 #else
-    // 发布版恒为 false：环境变量不能把正式版的连发变成空跑，环境变量在发行版里完全无效
+    // 发布版恒为 false：环境变量不能把正式版的连按变成空跑，环境变量在发行版里完全无效
     internal static readonly bool DryRun = false;
 #endif
 
@@ -106,7 +106,7 @@ internal sealed class AutoFireEngine
 
         _stop = false;
         _wake.Reset();   // 上一次停止可能留下一次唤醒信号，先吃掉
-        // 1ms 计时精度不在这里要：工作线程只在真要连发时才提精度，空闲时把系统计时器还回去
+        // 1ms 计时精度不在这里要：工作线程只在真要连按时才提精度，空闲时把系统计时器还回去
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "AutoFireEngine" };
         _worker.Start();
         _hook.Install();
@@ -134,7 +134,7 @@ internal sealed class AutoFireEngine
         _hook = null;
         Running = false;
 #if DEBUG
-        if (DryRun) EngineProbe.Report(0, "连发");
+        if (DryRun) EngineProbe.Report(0, "连按");
 #endif
     }
 
@@ -210,7 +210,7 @@ internal sealed class AutoFireEngine
 
     /// <summary>
     /// 等到「最早的到期时刻」，或有人按下/松开/停止时被立即叫醒。
-    /// 一个键都没在连发时用无限等待——工作线程真正睡着，不再 1ms 轮询。
+    /// 一个键都没在连按时用无限等待——工作线程真正睡着，不再 1ms 轮询。
     /// </summary>
     private void WaitNext(Stopwatch sw)
     {
@@ -223,7 +223,7 @@ internal sealed class AutoFireEngine
         }
 
         bool idle = earliest == long.MaxValue;
-        // 只有真要连发时才需要 1ms 精度（按下/抬起各 20ms 靠它对齐帧），空闲时还给系统
+        // 只有真要连按时才需要 1ms 精度（按下/抬起各 20ms 靠它对齐帧），空闲时还给系统
         SetPeriod(!idle);
         if (idle)
         {
@@ -255,7 +255,7 @@ internal sealed class AutoFireEngine
         if (_blocked) return;
         _blocked = true;
         Logger.Error("AutoFireEngine", new InvalidOperationException(
-            "连发注入被系统拦截（SendInput 返回 0）。请以管理员身份运行；若游戏以更高权限启动，注入无法生效。"));
+            "连按注入被系统拦截（SendInput 返回 0）。请以管理员身份运行；若游戏以更高权限启动，注入无法生效。"));
         try { Blocked?.Invoke(); } catch (Exception ex) { Logger.Error("Blocked", ex); }
     }
 

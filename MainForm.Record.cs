@@ -153,7 +153,7 @@ public partial class MainForm : Form
         numPlayValue.Enabled = _recorder == null && _player == null;
     }
 
-    /// <summary>连发模式说明：跟着下拉框当前选项走（原来固定写着 B 模式的长句）。</summary>
+    /// <summary>连按模式说明：跟着下拉框当前选项走（原来固定写着 B 模式的长句）。</summary>
     private void ApplyKeyModeTip()
     {
         if (lblModeTip == null || cboMode == null) return;
@@ -308,7 +308,7 @@ public partial class MainForm : Form
 
     // ---------- 录制 ----------
 
-    /// <summary>录制期间拒绝开启连发/连点：注入事件会污染轨迹，连点拦截还会吞掉真实点击。</summary>
+    /// <summary>录制期间拒绝开启连按/连点：注入事件会污染轨迹，连点拦截还会吞掉真实点击。</summary>
     private bool RefuseWhileRecording()
     {
         if (_recorder == null) return false;
@@ -341,7 +341,7 @@ public partial class MainForm : Form
         if (_engine.Running || _mouseEngine.Running)
         {
             ShowWindow();
-            MessageBox.Show("连发或连点正在运行，请先关闭再录制。", "提示",
+            MessageBox.Show("连按或连点正在运行，请先关闭再录制。", "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -628,7 +628,7 @@ public partial class MainForm : Form
             _playOverlay = null;
         }
 
-        Hide(); // 与连发一致：让游戏拿到焦点
+        Hide(); // 与连按一致：让游戏拿到焦点
 
         // 录制与当前虚拟桌面不一致时只提示、不阻止（换过分辨率/显示器的情况很常见）
         var v = NativeInput.VirtualScreen();

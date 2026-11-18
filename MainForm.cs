@@ -102,8 +102,8 @@ public partial class MainForm : Form
     private Label lblTarget = null!;        // "当前控制：连按/鼠标连点" 标识
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
-    private Label lblHotkey = null!;   // "连发热键/连点热键" 标签，随 Tab 切换
-    private Label lblMode = null!;     // "连发模式" 标签（仅按键页显示）
+    private Label lblHotkey = null!;   // "连按热键/连点热键" 标签，随 Tab 切换
+    private Label lblMode = null!;     // "连按模式" 标签（仅按键页显示）
     private Label lblModeTip = null!;  // 底部提示文字，随 Tab 切换
     private bool _loading = true;      // 构造/加载配置期间不触发自动保存
     private bool _hotkeySyncing;       // Tab 切换同步热键下拉框时不触发保存/重注册
@@ -197,7 +197,7 @@ public partial class MainForm : Form
         };
 
         // 注入被系统拦截：窗口此时已收进托盘，气泡是用户唯一能看到的提示，必须弹一次
-        _engine.Blocked += () => NotifyInjectBlocked("连发");
+        _engine.Blocked += () => NotifyInjectBlocked("连按");
         _mouseEngine.Blocked += () => NotifyInjectBlocked("连点");
 
         Shown += (_, _) =>
@@ -264,8 +264,8 @@ public partial class MainForm : Form
     {
         if (_engine.InjectBlocked || _mouseEngine.InjectBlocked)
         {
-            string which = _engine.InjectBlocked && _mouseEngine.InjectBlocked ? "连发/连点"
-                : _engine.InjectBlocked ? "连发" : "连点";
+            string which = _engine.InjectBlocked && _mouseEngine.InjectBlocked ? "连按/连点"
+                : _engine.InjectBlocked ? "连按" : "连点";
             lblStatus.ForeColor = AntStyle.Danger;
             UpdateStatus($"警告：{which}注入被系统拦截，请以管理员运行");
             return;
@@ -333,7 +333,7 @@ public partial class MainForm : Form
         return dlg.Result;
     }
 
-    /// <summary>最小化到托盘：窗口隐藏、程序继续跑（连发/连点/录制回放都不中断）。</summary>
+    /// <summary>最小化到托盘：窗口隐藏、程序继续跑（连按/连点/录制回放都不中断）。</summary>
     private void HideToTray()
     {
         Hide();
@@ -383,7 +383,7 @@ public partial class MainForm : Form
         base.WndProc(ref m);
         if (m.Msg == WM_HOTKEY)
         {
-            // 每个热键固定对应自己的引擎：连发热键开关连发、连点热键开关连点，与当前 Tab 无关
+            // 每个热键固定对应自己的引擎：连按热键开关连按、连点热键开关连点，与当前 Tab 无关
             switch (m.WParam.ToInt32())
             {
                 case HOTKEY_ID_START:
@@ -484,7 +484,7 @@ public partial class MainForm : Form
 
         RelayoutRows();
         UpdateRowButtons();
-        cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连发热键
+        cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连按热键
         cboMode.SelectedIndex = _config.Mode == "A" ? 0 : 1;
 
         // 鼠标连点行：固定左/右/滚轮三行，按 Button 匹配配置

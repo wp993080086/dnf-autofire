@@ -171,7 +171,7 @@ internal sealed class MouseClickEngine
 
                 if (now < t.NextDue) continue;
 
-                // 与键盘连发一致的帧兼容节奏：按下/抬起各 ≥20ms，有效间隔下限 40ms
+                // 与键盘连按一致的帧兼容节奏：按下/抬起各 ≥20ms，有效间隔下限 40ms
                 long period = Math.Max(t.IntervalMs, 40) * Stopwatch.Frequency / 1000;
                 long hold = Math.Clamp(t.IntervalMs / 2, 20, 30) * Stopwatch.Frequency / 1000;
                 if (!t.IsDown)

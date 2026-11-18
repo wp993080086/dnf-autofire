@@ -215,12 +215,19 @@ internal static class NativeInput
     public static void SendKey(int vk, bool up)
     {
         ushort scan = (ushort)NativeMethods.MapVirtualKey((uint)vk, NativeMethods.MAPVK_VK_TO_VSC);
+
+        // 按扫描码注入时系统不会替你补 E0 前缀：方向键、Home/End/PgUp/PgDn 等扩展键
+        // 少了 KEYEVENTF_EXTENDEDKEY，目标程序收到的就是小键盘键（0x48 → 小键盘 8）
+        uint flags = NativeMethods.KEYEVENTF_SCANCODE;
+        if (KeyNames.IsExtended(vk)) flags |= NativeMethods.KEYEVENTF_EXTENDEDKEY;
+        if (up) flags |= NativeMethods.KEYEVENTF_KEYUP;
+
         var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_KEYBOARD };
         input.U.ki = new NativeMethods.KEYBDINPUT
         {
             wVk = (ushort)vk,
             wScan = scan,
-            dwFlags = NativeMethods.KEYEVENTF_SCANCODE | (up ? NativeMethods.KEYEVENTF_KEYUP : 0),
+            dwFlags = flags,
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };

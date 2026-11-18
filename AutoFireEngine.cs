@@ -40,7 +40,12 @@ internal sealed class AutoFireEngine
     private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
     // 测试用：设置环境变量 DNF_DRYRUN=1 时不真正注入按键，只跑调度计数
+#if DEBUG
     internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
+#else
+    // 发布版恒为 false：环境变量不能把正式版的连发变成空跑，环境变量在发行版里完全无效
+    internal static readonly bool DryRun = false;
+#endif
 
     private static void Send(int vk, bool up)
     {

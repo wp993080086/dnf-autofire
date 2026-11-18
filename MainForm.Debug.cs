@@ -460,5 +460,81 @@ public partial class MainForm : Form
         // 交给消息循环关窗：确保 OnFormClosing 的兜底落盘真的跑到
         BeginInvoke(new Action(Close));
     }
+
+    /// <summary>
+    /// 调试入口：--keycaptest 逐个喂物理按键给键名框，验证捕获写入的键名是否符合预期。
+    /// 单字符 A-Z / 0-9 应交给 KeyPress 路径（KeyDown 不写入也不拦截），其余键在这里整体写入。
+    /// </summary>
+    internal void DebugKeyCaptureTest()
+    {
+        bool oldLoading = _loading;
+        _loading = true; // 别让测试写 config.json
+        int bad = 0;
+        try
+        {
+            var txt = _rows[0].TxtKey.Inner;
+
+            // 应当整体写入的长键名 / 小键盘 / 符号键
+            var direct = new (Keys Key, string Expect)[]
+            {
+                (Keys.F1, "F1"), (Keys.F5, "F5"), (Keys.F12, "F12"),
+                (Keys.Space, "SPC"), (Keys.Tab, "TAB"), (Keys.Enter, "ENT"), (Keys.Escape, "ESC"),
+                (Keys.Back, "BS"), (Keys.Home, "HOME"), (Keys.End, "END"),
+                (Keys.PageUp, "PGUP"), (Keys.PageDown, "PGDN"),
+                (Keys.Left, "LEFT"), (Keys.Up, "UP"), (Keys.Right, "RIGHT"), (Keys.Down, "DOWN"),
+                (Keys.NumPad0, "N0"), (Keys.NumPad5, "N5"), (Keys.NumPad9, "N9"),
+                (Keys.Oem1, ";"), (Keys.Oemplus, "="), (Keys.Oemcomma, ","), (Keys.OemMinus, "-"),
+                (Keys.OemPeriod, "."), (Keys.OemQuestion, "/"), (Keys.Oemtilde, "`"),
+                (Keys.OemOpenBrackets, "["), (Keys.OemPipe, "\\"), (Keys.OemCloseBrackets, "]"),
+                (Keys.OemQuotes, "'"),
+            };
+            foreach (var (key, expect) in direct)
+            {
+                txt.Clear();
+                KeyBox_KeyDown(txt, new KeyEventArgs(key));
+                string got = txt.Text;
+                if (got != expect) { bad++; Console.WriteLine($"[cap] BAD {key,-12} 期望 {expect} 实际「{got}」"); }
+                else Console.WriteLine($"[cap] ok  {key,-12} → {got}");
+            }
+
+            // 单字符 A-Z / 0-9：KeyDown 不能拦截也不能写入，留给 KeyPress
+            foreach (Keys key in new[] { Keys.A, Keys.Z, Keys.D0, Keys.D9 })
+            {
+                txt.Clear();
+                var ev = new KeyEventArgs(key);
+                KeyBox_KeyDown(txt, ev);
+                if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 不该在 KeyDown 里处理"); }
+            }
+
+            // 不支持的键：必须吞掉且不写入
+            foreach (Keys key in new[] { Keys.Insert, Keys.Divide, Keys.Multiply, Keys.CapsLock })
+            {
+                txt.Clear();
+                var ev = new KeyEventArgs(key);
+                KeyBox_KeyDown(txt, ev);
+                if (!ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 应被拒绝，实际「{txt.Text}」"); }
+            }
+
+            // 修饰键：不写入，但也不拦截（要留给 Ctrl+V 这类系统组合）
+            foreach (Keys key in new[] { Keys.LShiftKey, Keys.ControlKey, Keys.Menu })
+            {
+                txt.Clear();
+                var ev = new KeyEventArgs(key);
+                KeyBox_KeyDown(txt, ev);
+                if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 不该拦截，实际「{txt.Text}」"); }
+            }
+
+            // Delete 仍是清空
+            txt.Text = "SPC";
+            KeyBox_KeyDown(txt, new KeyEventArgs(Keys.Delete));
+            if (txt.Text.Length != 0) { bad++; Console.WriteLine("[cap] BAD Delete 未清空"); }
+
+            Console.WriteLine(bad == 0 ? "[cap] PASS" : $"[cap] FAIL（{bad} 处异常）");
+        }
+        finally
+        {
+            _loading = oldLoading;
+        }
+    }
 }
 #endif

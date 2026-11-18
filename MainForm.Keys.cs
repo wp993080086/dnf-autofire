@@ -80,7 +80,7 @@ public partial class MainForm : Form
                 status = empty ? $"第 {i + 1} 行未填键名，无法开启" : $"第 {i + 1} 行键名 {text} 不合法，无法开启";
                 return empty
                     ? $"第 {i + 1} 行勾选了「启用」但没有填键名。\n请填写键名，或取消这一行的勾选。"
-                    : $"第 {i + 1} 行的键名「{text}」不合法。\n只支持 A-Z、0-9；小键盘数字用 N0-N9（例如 N5）。";
+                    : $"第 {i + 1} 行的键名「{text}」不合法。\n{KeyNames.Help}。";
             }
             if (used.TryGetValue(vk, out int other))
             {
@@ -140,9 +140,10 @@ public partial class MainForm : Form
             Location = new Point(58, 3),
             Size = new Size(56, 28)
         };
-        row.TxtKey.Inner.MaxLength = 2;   // 单字符 A-Z/0-9；小键盘数字为 N0-N9 两字符
+        row.TxtKey.Inner.MaxLength = KeyNames.MaxLength; // 最长 RIGHT/PGUP 这一档
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
+        row.TxtKey.Inner.AcceptsTab = true;  // 让 Tab 进 KeyDown 被捕获，而不是切走焦点
         row.TxtKey.Text = key;
 
         // 控件按实测文字宽度顺排，间距统一 8px（Label.AutoSize 挂到父控件后 Right 才有值）。
@@ -216,8 +217,8 @@ public partial class MainForm : Form
         row.TxtKey.Inner.KeyDown += KeyBox_KeyDown;
         row.TxtKey.Inner.TextChanged += KeyBox_TextChanged;
         row.TxtKey.Inner.TextChanged += (_, _) => { if (!_loading) SaveConfig(); };
-        _keyTip.SetToolTip(row.TxtKey, "支持 A-Z、0-9；小键盘数字直接按小键盘（显示为 N0-N9）");
-        _keyTip.SetToolTip(row.TxtKey.Inner, "支持 A-Z、0-9；小键盘数字直接按小键盘（显示为 N0-N9）");
+        _keyTip.SetToolTip(row.TxtKey, "直接按目标键即可（" + KeyNames.Help + "）");
+        _keyTip.SetToolTip(row.TxtKey.Inner, "直接按目标键即可（" + KeyNames.Help + "）");
         row.TxtMs.Inner.KeyPress += MsBox_KeyPress;
         row.TxtMs.Inner.Leave += MsBox_Leave;
         row.TxtMs.ValueChanged += (_, _) => { if (!_loading) SaveConfig(); };
@@ -332,7 +333,10 @@ public partial class MainForm : Form
 
     // ---------- 输入校验 ----------
 
-    /// <summary>键名键入：只放行 A-Z / 0-9；已有一个字符时若无法组成合法两字符键名，用新字符整体替换。</summary>
+    /// <summary>
+    /// 键名键入的兜底通道：A-Z / 0-9 走这里，单字符整体替换。
+    /// 功能键、方向键、空格、编辑键与符号键由 KeyBox_KeyDown 按 VK 捕获，不经过这里。
+    /// </summary>
     private void KeyBox_KeyPress(object? sender, KeyPressEventArgs e)
     {
         if (sender is not TextBox txt) return;
@@ -342,16 +346,13 @@ public partial class MainForm : Form
 
         if (!(c is >= 'A' and <= 'Z' or >= '0' and <= '9'))
         {
-            e.Handled = true; // 符号、空格、中文一律吞掉
-            UpdateStatus("键名只能是 A-Z、0-9；小键盘数字用 N0-N9");
+            e.Handled = true; // 符号、空格、中文一律吞掉（符号键在 KeyDown 里按 VK 捕获）
+            UpdateStatus("这个字符不能作为键名：" + KeyNames.Help);
             return;
         }
 
-        // 唯一合法两字符形态是「N + 数字」（小键盘），其余情况一律整体替换而非拼接
-        string cur = txt.SelectionLength > 0 ? "" : txt.Text;
-        bool append = cur.Length == 1 && cur[0] == 'N' && c is >= '0' and <= '9';
-        if (append) txt.SelectionStart = txt.TextLength; // 光标可能停在 N 之前，强制追加到末尾
-        if (cur.Length > 0 && !append)
+        // 一律整体替换而非拼接：小键盘 N0-N9 与长键名都在 KeyDown 里整体写入
+        if (txt.SelectionLength == 0 && txt.TextLength > 0)
         {
             _keyFixing = true;
             txt.Clear();
@@ -360,31 +361,54 @@ public partial class MainForm : Form
         e.KeyChar = c;
     }
 
+    /// <summary>
+    /// 键名捕获：直接按目标键写入规范键名。
+    /// 单字符 A-Z、0-9 交给 KeyPress 走文本输入；功能键、方向键、空格、编辑键、符号键在这里
+    /// 按 VK 反查写入（符号键因此不受键盘布局下实际字符的影响）。不支持的键一律吞掉并提示。
+    /// </summary>
     private void KeyBox_KeyDown(object? sender, KeyEventArgs e)
     {
         if (sender is not TextBox txt) return;
-        int code = (int)e.KeyCode;
 
-        // 小键盘数字：直接存成 N0-N9，与主键盘数字（VK 0x30-0x39）区分开
-        if (code >= (int)Keys.NumPad0 && code <= (int)Keys.NumPad9)
-        {
-            _keyFixing = true;
-            txt.Text = "N" + (code - (int)Keys.NumPad0);
-            txt.SelectionStart = txt.TextLength;
-            _keyFixing = false;
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-            KeyBox_TextChanged(txt, EventArgs.Empty); // 上面屏蔽了 TextChanged，这里补跑一次校验与去重
-            if (!_loading) SaveConfig();
-            return;
-        }
+        // Ctrl/Alt 组合留给文本框自己处理（Ctrl+V 粘贴、Ctrl+A 全选、Ctrl+Z 撤销）
+        if (e.Control || e.Alt) return;
+        // 单独按修饰键既不是目标键，也不该拦掉系统行为（Shift 打大写、系统快捷键）
+        if (KeyNames.IsModifier(e.KeyCode)) return;
 
         if (e.KeyCode == Keys.Delete)
         {
             txt.Clear(); // Delete 清空该行键名
             e.Handled = true;
             e.SuppressKeyPress = true;
+            return;
         }
+
+        string? name = KeyNames.FromKeys(e.KeyCode);
+        if (name == null)
+        {
+            // 小键盘 / * - + . 、Insert、CapsLock 等：吞掉，避免打出字符或触发控件默认行为
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            UpdateStatus("这个键不支持连发，可用 A-Z、0-9、F1-F12、空格、方向键与符号键");
+            return;
+        }
+
+        if (name.Length == 1 && char.IsLetterOrDigit(name[0])) return; // A-Z / 0-9 交给 KeyPress
+
+        SetKeyText(txt, name);
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+    }
+
+    /// <summary>整体写入键名：屏蔽 TextChanged，再补跑一次校验与查重，最后落盘。</summary>
+    private void SetKeyText(TextBox txt, string name)
+    {
+        _keyFixing = true;
+        txt.Text = name;
+        txt.SelectionStart = txt.TextLength;
+        _keyFixing = false;
+        KeyBox_TextChanged(txt, EventArgs.Empty);
+        if (!_loading) SaveConfig();
     }
 
     private void KeyBox_TextChanged(object? sender, EventArgs e)
@@ -402,17 +426,15 @@ public partial class MainForm : Form
             _keyFixing = false;
         }
 
-        // 非法形态（如粘贴 "X5"、"1A"）→ 清空
+        // 非法形态（如粘贴 "X5"、"AB"）→ 清空
         if (KeyTextToVk(value) < 0)
         {
             _keyFixing = true;
             txt.Clear();
             _keyFixing = false;
-            UpdateStatus("键名不合法，已清空（允许 A-Z、0-9，小键盘用 N0-N9）");
+            UpdateStatus("键名不合法，已清空（" + KeyNames.Help + "）");
             return;
         }
-
-        if (value == "N") return; // 可能是输入 N5 的中间态，重复检查留到开启时
 
         // 与其他行键名重复 → 直接置空本行
         int vk = KeyTextToVk(value);
@@ -455,23 +477,8 @@ public partial class MainForm : Form
         return ClampMs(v); // 允许 1~5000 任意整数（步进按钮仍按 50 步进）
     }
 
-    /// <summary>
-    /// 键名文本 → 虚拟键码。单字符 A-Z / 0-9 直接取字符码（VK_A=0x41、VK_0=0x30）；
-    /// 两字符 N0-N9 表示小键盘数字（VK_NUMPAD0=0x60）。返回 -1 表示非法。
-    /// </summary>
-    private static int KeyTextToVk(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return -1;
-        string s = text.Trim().ToUpperInvariant();
-        if (s.Length == 1)
-        {
-            char c = s[0];
-            return c is >= 'A' and <= 'Z' or >= '0' and <= '9' ? c : -1;
-        }
-        if (s.Length == 2 && s[0] == 'N' && s[1] is >= '0' and <= '9')
-            return 0x60 + (s[1] - '0');
-        return -1;
-    }
+    /// <summary>键名文本 → 虚拟键码，映射规则集中在 KeyNames（-1 表示非法）。</summary>
+    private static int KeyTextToVk(string? text) => KeyNames.ToVk(text);
 
     /// <summary>读取配置时规范化键名：大写；非法（旧版本或手改坏的值）一律回落为空，等用户重填。</summary>
     private static string SanitizeKeyText(string? text)

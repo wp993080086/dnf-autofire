@@ -29,7 +29,65 @@ internal static partial class Program
         if (args.Length >= 3 && args[1] == "--closetest") { RunCloseTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--xclosetest") { RunXCloseTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--savetest") { RunSaveTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--keynametest") { RunKeyNameTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--keycaptest") { RunKeyCapTest(args); return true; }
         return false;
+    }
+
+    // 调试用：dnf-autofire --keycaptest 喂物理按键给键名框，验证捕获到的键名
+    private static void RunKeyCapTest(string[] args)
+    {
+        using var form = new MainForm();
+        form.Show();
+        Application.DoEvents();
+        form.DebugKeyCaptureTest();
+        form.Close();
+    }
+
+    // 调试用：dnf-autofire --keynametest 校验键名映射表的往返一致性、VK 唯一性与扩展键标记
+    private static void RunKeyNameTest(string[] args)
+    {
+        int total = 0, bad = 0;
+        var seen = new Dictionary<int, string>();
+
+        foreach (string name in KeyNames.All())
+        {
+            total++;
+            int vk = KeyNames.ToVk(name);
+            if (vk <= 0)
+            {
+                Console.WriteLine($"[name] BAD {name} 解析失败");
+                bad++;
+                continue;
+            }
+            string? back = KeyNames.FromKeys((Keys)vk);
+            if (back != name)
+            {
+                Console.WriteLine($"[name] BAD {name} → vk=0x{vk:X2} → {back ?? "(null)"}");
+                bad++;
+            }
+            if (seen.TryGetValue(vk, out string? other))
+            {
+                Console.WriteLine($"[name] BAD {name} 与 {other} 撞同一个 VK 0x{vk:X2}");
+                bad++;
+            }
+            else seen[vk] = name;
+        }
+        Console.WriteLine($"[name] 共 {total} 个键名 / {seen.Count} 个不同 VK，异常 {bad} 个");
+
+        // 扩展键必须带 E0 前缀，普通键不能带（多带了会被当成扩展键，如小键盘 Enter）
+        foreach (string name in new[] { "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN" })
+            if (!KeyNames.IsExtended(KeyNames.ToVk(name))) { Console.WriteLine($"[name] BAD {name} 未标记为扩展键"); bad++; }
+        foreach (string name in new[] { "A", "0", "N5", "SPC", "F5", "TAB", "ENT", "ESC", "BS", ";" })
+            if (KeyNames.IsExtended(KeyNames.ToVk(name))) { Console.WriteLine($"[name] BAD {name} 被误标为扩展键"); bad++; }
+
+        // 非法与非目标键：必须拒绝
+        foreach (string text in new[] { "", "  ", "X5", "AB", "F13", "NUMPAD5", "SHIFT", "CTRL", "DEL", "INS" })
+            if (KeyNames.ToVk(text) >= 0) { Console.WriteLine($"[name] BAD 「{text}」应判为非法"); bad++; }
+        foreach (Keys key in new[] { Keys.Insert, Keys.LShiftKey, Keys.Divide, Keys.CapsLock, Keys.Multiply })
+            if (KeyNames.FromKeys(key) != null) { Console.WriteLine($"[name] BAD {key} 应判为不支持"); bad++; }
+
+        Console.WriteLine(bad == 0 ? "[name] PASS" : $"[name] FAIL（{bad} 处异常）");
     }
 
     // 调试用：dnf-autofire --savetest <最终间隔秒> [等待毫秒]

@@ -6,8 +6,6 @@
 
 ## [Unreleased]
 
-## [1.3.0] - 2026-11-18
-
 ### 新增
 
 - **鼠标侧键 X1/X2 连点**：鼠标页由三行扩到五行，侧键与其它键一样支持「松手停止 / 自动点击」。钩子按 `WM_XBUTTONDOWN/UP` 的 `mouseData` 高字区分两颗侧键，注入用 `MOUSEEVENTF_XDOWN/XUP` + 侧键序号；旧配置自动补出关闭状态的 X1/X2 两行
@@ -21,7 +19,7 @@
 - **整窗渐变背景**：客户区从顶部 12% 主题色（`#E8F2FF`）线性渐变到一半高度纯白；标题栏由系统绘制、不在此范围
 - **移除页签切换过渡**：切页改为直接切换（此前的交叉淡化实际被蒙层层级问题掩盖，观感是闪烁）；Tab 下划线的滑动指示保留
 - **托盘菜单精简**：移除「开始录制 / 开始回放」两项，只保留「显示窗口 / 打开日志 / 退出程序」；录制与回放仍可用热键（`F9`/`F10`）或录制页按钮与状态条操作
-- 抽出 `HotkeyFallback.ToVk`、`ConfigManager.ParseAndSanitize`、`NativeInput.NormalizePointer`、`PlayText`、`RecordStore.SanitizeProfiles` 等纯函数，新增 xUnit 测试项目（79 项），CI 在 publish 前先跑 Release 测试；CI 发布时用 tag 版本覆盖 `Version`，保证 exe 自报版本与 tag 一致
+- 抽出 `HotkeyFallback.ToVk`、`ConfigManager.ParseAndSanitize`、`NativeInput.NormalizePointer`、`PlayText`、`RecordStore.SanitizeProfiles` 等纯函数，新增 xUnit 测试项目（79 项），CI 在 publish 前先跑 Release 测试
 - 键名 ↔ 虚拟键码的映射集中到 `KeyNames.cs`，界面校验、配置读取、注入路径共用一张表，避免三处各写一份
 - 明确不支持 `F1`–`F12`、方向键、`TAB`/`ENT`/`ESC`/`HOME`/`END`/`PGUP`/`PGDN`、修饰键与小键盘符号键。F 键留给热键（否则目标键会被系统当热键截走，连发收不到按下），方向键与编辑键在游戏里没有连发价值，还会吃掉文本框的光标移动与 Tab 切焦点
 - 注入层按 VK 补齐扩展键的 `E0` 前缀。当前支持集已无扩展键，属预防性修正：少了它方向键会被目标程序识别成小键盘上的同名键（上箭头 0x26 注入成 0x68 小键盘 8）
@@ -132,7 +130,6 @@
 - `F6` 单键开关热键、托盘运行
 - 配置持久化（`config.json`，无写权限自动回退 `%APPDATA%`）与错误日志（`error.log`）
 
-[Unreleased]: https://github.com/wp993080086/dnf-autofire/compare/v1.3.0...HEAD
-[1.3.0]: https://github.com/wp993080086/dnf-autofire/compare/v1.2.0...v1.3.0
+[Unreleased]: https://github.com/wp993080086/dnf-autofire/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/wp993080086/dnf-autofire/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wp993080086/dnf-autofire/compare/v1.0.0...v1.1.0

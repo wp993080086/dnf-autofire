@@ -27,7 +27,7 @@ public partial class MainForm : Form
                 break;
 
             default: // TabKeys
-                lblTarget.Text = "当前控制：按键连发";
+                lblTarget.Text = "当前控制：连按";
                 btnMain.Text = _engine.Running ? "关闭连发" : "开启连发";
                 btnMain.Enabled = true;
                 btnMain.Danger = _engine.Running;
@@ -129,7 +129,7 @@ public partial class MainForm : Form
         btnPlay.Click += (_, _) => TogglePlayback();
         lblTarget = new Label
         {
-            Text = "当前控制：按键连发",
+            Text = "当前控制：连按",
             Location = new Point(14, 50),
             AutoSize = true,
             ForeColor = AntStyle.Primary,

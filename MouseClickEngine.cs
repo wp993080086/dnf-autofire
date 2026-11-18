@@ -54,9 +54,9 @@ internal sealed class MouseClickEngine
     /// <summary>所有目标行都是「自动点击」且次数已跑完时触发（工作线程上回调，UI 需自行调度）。</summary>
     public event Action? AllDone;
 
-    // 测试用：设置环境变量 DNF_DRYRUN=1 时不真正注入点击，只跑调度计数
+    // 测试用：设置环境变量 KEYMOUSE_DRYRUN=1 时不真正注入点击，只跑调度计数
 #if DEBUG
-    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
+    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("KEYMOUSE_DRYRUN") == "1";
 #else
     // 发布版恒为 false：环境变量不能把正式版的连点变成空跑，环境变量在发行版里完全无效
     internal static readonly bool DryRun = false;

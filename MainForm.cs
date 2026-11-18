@@ -5,7 +5,7 @@ namespace KeyMouseFactory;
 public partial class MainForm : Form
 {
     private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID_START = 1;  // 按键连发热键
+    private const int HOTKEY_ID_START = 1;  // 连按热键
     private const int HOTKEY_ID_MOUSE = 2;  // 鼠标连点热键
     private const int HOTKEY_ID_RECORD = 3; // 录制热键
     private const int HOTKEY_ID_PLAY = 4;   // 回放热键
@@ -99,7 +99,7 @@ public partial class MainForm : Form
     private readonly System.Windows.Forms.Timer _playTimer; // 回放进度 200ms 刷新
 
     private AntButton btnMain = null!;      // 唯一主按钮：控制当前 Tab 对应的引擎
-    private Label lblTarget = null!;        // "当前控制：按键连发/鼠标连点" 标识
+    private Label lblTarget = null!;        // "当前控制：连按/鼠标连点" 标识
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
     private Label lblHotkey = null!;   // "连发热键/连点热键" 标签，随 Tab 切换
@@ -271,7 +271,7 @@ public partial class MainForm : Form
             return;
         }
         lblStatus.ForeColor = AntStyle.TextTertiary;
-        string keys = _engine.Running ? $"按键连发 运行中（{(_engine.Mode == "A" ? "保留原生" : "拦截原生")}）" : "按键连发 未开启";
+        string keys = _engine.Running ? $"连按 运行中（{(_engine.Mode == "A" ? "保留原生" : "拦截原生")}）" : "连按 未开启";
         string mouse = _mouseEngine.Running ? "鼠标连点 运行中" : "鼠标连点 未开启";
         UpdateStatus($"{keys} · {mouse}");
     }

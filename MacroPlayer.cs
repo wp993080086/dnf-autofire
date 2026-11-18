@@ -32,9 +32,9 @@ internal sealed class MacroPlayer : IDisposable
     private const int WaitFineWindowMs = 50; // 剩余时间超过它先粗等，把最后 50ms 留给小步
     private const int WaitSliceMs = 10;      // 尾段单次等待上限：被调度延迟后下一轮能立刻补偿
 
-    // 测试用：DNF_DRYRUN=1 时只跑时间轴、不注入任何输入
+    // 测试用：KEYMOUSE_DRYRUN=1 时只跑时间轴、不注入任何输入
 #if DEBUG
-    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
+    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("KEYMOUSE_DRYRUN") == "1";
 #else
     // 发布版恒为 false：环境变量不能把正式版的回放变成空跑，环境变量在发行版里完全无效
     internal static readonly bool DryRun = false;

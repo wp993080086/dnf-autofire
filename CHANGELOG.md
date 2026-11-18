@@ -32,7 +32,7 @@
 
 - **tab 页签 hover 闪烁**：`TabHeaderPanel` 此前只设了 `Selectable`，未开双缓冲，鼠标划过时每次 `Invalidate()` 都走「擦白底→重绘」两步导致一闪一闪。现在补齐 `AllPaintingInWmPaint | OptimizedDoubleBuffer | UserPaint | ResizeRedraw`，与项目其它自绘控件一致
 - **`recordings.json` 里 `screen` 为 null 导致回放崩溃**：JSON 显式写 null 会绕过属性初始化器，回放直接读 `Screen.W` 就抛 `NullReferenceException`。加载时统一钳制 `Screen`/`Points`/`Id` 并丢弃 null 元素，补上对应单测
-- **发布版仍读 `DNF_DRYRUN`**：这个调试空跑开关原本在 Release 里也生效，环境变量凑巧为 `1` 时连发 / 连点 / 回放会静默失效（不注入任何输入）。现在 Release 里恒为 false，与环境变量无关
+- **发布版仍读 `KEYMOUSE_DRYRUN`**：这个调试空跑开关原本在 Release 里也生效，环境变量凑巧为 `1` 时连发 / 连点 / 回放会静默失效（不注入任何输入）。现在 Release 里恒为 false，与环境变量无关
 - **退格被当成键名**：键名框里按退格会写入 `BS` 而不是删字符。已恢复删除语义
 - **热键被占用自动换键**：按 F1–F12 顺序挑空闲键（跳过其它槽位在用的键），成功后写回配置并在状态栏/托盘/日志提示；12 个键全占满才退回只警告
 - **单实例唤起窗口**：再次启动 exe 时不再只弹「已经在运行」，而是广播消息让已运行的实例把窗口叫到前台（托盘隐藏时自动显示）

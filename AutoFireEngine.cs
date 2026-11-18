@@ -5,7 +5,7 @@ namespace KeyMouseFactory;
 
 /// <summary>
 /// 连发引擎：独立高精度线程按 Stopwatch 调度。
-/// DNF 这类游戏按帧轮询键盘状态、以「上帧未按下→本帧按下」的边沿触发攻击：
+/// 这类游戏按帧轮询键盘状态、以「上帧未按下→本帧按下」的边沿触发攻击：
 /// 按住不放只算一次，按下/抬起窗口短于 1 帧又会被整段错过。
 /// 因此调度上强制「按下保持 ≥20ms、抬起 ≥20ms」，有效间隔下限 40ms（60 帧游戏）。
 /// 模式 A：放行原生按键，叠加模拟连发；模式 B：拦截原生按键，仅程序模拟（默认）。
@@ -39,9 +39,9 @@ internal sealed class AutoFireEngine
     private readonly object _periodSync = new();
     private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 
-    // 测试用：设置环境变量 DNF_DRYRUN=1 时不真正注入按键，只跑调度计数
+    // 测试用：设置环境变量 KEYMOUSE_DRYRUN=1 时不真正注入按键，只跑调度计数
 #if DEBUG
-    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("DNF_DRYRUN") == "1";
+    internal static readonly bool DryRun = Environment.GetEnvironmentVariable("KEYMOUSE_DRYRUN") == "1";
 #else
     // 发布版恒为 false：环境变量不能把正式版的连发变成空跑，环境变量在发行版里完全无效
     internal static readonly bool DryRun = false;

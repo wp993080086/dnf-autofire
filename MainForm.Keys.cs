@@ -485,7 +485,7 @@ public partial class MainForm : Form
 
     // ---------- 辅助 ----------
 
-    /// <summary>按键连发运行中锁定按键页配置；两个引擎互不影响。</summary>
+    /// <summary>连按运行中锁定按键页配置；两个引擎互不影响。</summary>
     private void SetKeysUiLocked(bool locked)
     {
         foreach (var r in _rows)

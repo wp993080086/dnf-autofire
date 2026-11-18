@@ -382,7 +382,7 @@ internal static partial class Program
     }
 
     // 调试用：key-mouse-factory --playtest <方案名> <值> [count|infinite|duration] [最长秒数] [截图路径]
-    // 按指定模式回放，到点/跑完即退出（配 DNF_DRYRUN=1 只跑时间轴不注入鼠标）
+    // 按指定模式回放，到点/跑完即退出（配 KEYMOUSE_DRYRUN=1 只跑时间轴不注入鼠标）
     private static void RunPlayTest(string[] args)
     {
         var form = new MainForm();

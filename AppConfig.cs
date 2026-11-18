@@ -7,9 +7,9 @@ namespace KeyMouseFactory;
 /// <summary>界面与配置共用的取值范围：加载配置时按同一套上下限校验，避免手改文件把非法值带进界面。</summary>
 public static class Limits
 {
-    public const int MsMin = 50;             // 按键连发间隔下限
-    public const int MsMax = 5000;           // 按键连发间隔上限
-    public const int MsStep = 50;            // 按键连发间隔步进
+    public const int MsMin = 50;             // 连按间隔下限
+    public const int MsMax = 5000;           // 连按间隔上限
+    public const int MsStep = 50;            // 连按间隔步进
 
     public const int MouseMsMin = 100;       // 鼠标连点间隔下限
     public const int MouseMsMax = 10000;     // 鼠标连点间隔上限
@@ -26,7 +26,7 @@ public static class Limits
     public const int PlayMinuteMax = 600;    // 回放「定时 N 分钟」上限
 }
 
-/// <summary>按键连发配置行。StopMode: hold=松手停止 / auto=自动连按（StopValue 0 表示无限）。</summary>
+/// <summary>连按配置行。StopMode: hold=松手停止 / auto=自动连按（StopValue 0 表示无限）。</summary>
 public class KeyConfig
 {
     public string Key { get; set; } = "";
@@ -56,7 +56,7 @@ public class AppConfig
 
     public List<KeyConfig> Keys { get; set; } = new();
     public List<MouseClickConfig> MouseClicks { get; set; } = new();
-    public string StartHotkey { get; set; } = "F6";      // 按键连发热键
+    public string StartHotkey { get; set; } = "F6";      // 连按热键
     public string MouseStartHotkey { get; set; } = "F8"; // 鼠标连点热键
     public string RecordHotkey { get; set; } = "F9";     // 录制热键
     public string PlaybackHotkey { get; set; } = "F10";  // 回放热键

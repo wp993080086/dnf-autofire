@@ -237,7 +237,7 @@ public partial class MainForm : Form
         t.Start();
     }
 
-    /// <summary>调试入口：--mousetest &lt;秒&gt; 按当前配置开启鼠标连点，数秒后关闭退出（配 DNF_DRYRUN=1 只跑调度不注入）。</summary>
+    /// <summary>调试入口：--mousetest &lt;秒&gt; 按当前配置开启鼠标连点，数秒后关闭退出（配 KEYMOUSE_DRYRUN=1 只跑调度不注入）。</summary>
     internal void DebugMouseTest(int seconds)
     {
         var t = new System.Windows.Forms.Timer { Interval = 800 };
@@ -294,7 +294,7 @@ public partial class MainForm : Form
 
     /// <summary>
     /// 调试入口：--playtest &lt;方案名&gt; &lt;值&gt; [count|infinite|duration] [最长秒数] [截图路径]。
-    /// 按指定模式开启回放，到点/跑完自动关闭退出（配 DNF_DRYRUN=1 只跑时间轴，不注入鼠标）。
+    /// 按指定模式开启回放，到点/跑完自动关闭退出（配 KEYMOUSE_DRYRUN=1 只跑时间轴，不注入鼠标）。
     /// </summary>
     internal void DebugPlayTest(string name, int value, string mode, int guardSeconds, string? shotPath = null)
     {

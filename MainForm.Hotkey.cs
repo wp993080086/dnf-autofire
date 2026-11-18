@@ -10,19 +10,27 @@ public partial class MainForm : Form
 
         // 四个热键同表处理：同一个键重复配置时只注册一次。
         // 否则后一个 RegisterHotKey 必然失败，会被误报成"被其他程序占用"。
-        var defs = new (int Id, string Name, string Key)[]
+        var defs = new (int Id, string Name, string Key, Action<string> Set)[]
         {
-            (HOTKEY_ID_START, "连发", _config.StartHotkey),
-            (HOTKEY_ID_MOUSE, "连点", _config.MouseStartHotkey),
-            (HOTKEY_ID_RECORD, "录制", _config.RecordHotkey),
-            (HOTKEY_ID_PLAY, "回放", _config.PlaybackHotkey)
+            (HOTKEY_ID_START, "连发", _config.StartHotkey, k => _config.StartHotkey = k),
+            (HOTKEY_ID_MOUSE, "连点", _config.MouseStartHotkey, k => _config.MouseStartHotkey = k),
+            (HOTKEY_ID_RECORD, "录制", _config.RecordHotkey, k => _config.RecordHotkey = k),
+            (HOTKEY_ID_PLAY, "回放", _config.PlaybackHotkey, k => _config.PlaybackHotkey = k)
         };
 
         var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var duplicated = new List<string>();
         var occupied = new List<string>();
+        var changed = new List<string>();
 
-        foreach (var (id, name, key) in defs)
+        // 备用键不能挑别的槽位原本配置的值，否则会把后面的槽位挤掉；
+        // busy 记的是被别的程序占用的键，换键后也要避开
+        var reserved = new HashSet<string>(
+            defs.Select(d => (d.Key ?? "").Trim()).Where(k => k.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        var busy = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (id, name, key, set) in defs)
         {
             string k = (key ?? "").Trim();
             if (k.Length == 0) continue;
@@ -33,9 +41,20 @@ public partial class MainForm : Form
                 continue;
             }
             if (!NativeMethods.RegisterHotKey(handle, id, 0, (uint)HotkeyStringToVk(k)))
-                occupied.Add(k);
-            else
-                owners[k] = name;
+            {
+                busy.Add(k);
+                string? alt = HotkeyFallback.Pick(reserved.Concat(owners.Keys).Concat(busy));
+                if (alt == null || !NativeMethods.RegisterHotKey(handle, id, 0, (uint)HotkeyStringToVk(alt)))
+                {
+                    occupied.Add(k);
+                    continue;
+                }
+                string from = k;
+                k = alt;
+                set(k);              // 内存里立刻生效，界面与配置文件稍后一起跟上
+                changed.Add($"{name} {from}→{k}");
+            }
+            owners[k] = name;
         }
 
         if (duplicated.Count > 0)
@@ -47,8 +66,17 @@ public partial class MainForm : Form
         if (occupied.Count > 0)
         {
             string names = string.Join("、", occupied);
-            Logger.Info($"热键注册失败：{names}（可能被其他程序占用）");
-            UpdateStatus("警告：热键 " + names + " 注册失败（可能被其他程序占用）");
+            Logger.Info($"热键注册失败：{names}，且没有空闲的 F 键可换");
+            UpdateStatus("警告：热键 " + names + " 注册失败，且没有空闲 F 键可换");
+        }
+        if (changed.Count > 0)
+        {
+            string desc = string.Join("、", changed);
+            Logger.Info($"热键被占用，已自动改用：{desc}（已写回配置）");
+            UpdateStatus("提示：热键被占用，已自动改用 " + desc);
+            trayIcon.ShowBalloonTip(3000, "热键已自动调整", desc + "，已写回配置。", ToolTipIcon.Info);
+            SyncHotkeyUI(); // 下拉框跟着新键走，其它槽位的置灰也要重算
+            SaveConfig();   // 走正常保存链路，把换键结果落到 config.json
         }
     }
 

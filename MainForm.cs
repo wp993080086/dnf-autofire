@@ -321,6 +321,14 @@ public partial class MainForm : Form
 
     protected override void WndProc(ref Message m)
     {
+        // 第二份实例启动时广播这条消息：不管窗口是隐藏在托盘还是被别的窗口盖住，都叫到前台
+        if (SingleInstanceSignal.Message != 0 && m.Msg == SingleInstanceSignal.Message)
+        {
+            ShowWindow();
+            m.Result = (IntPtr)1;
+            return;
+        }
+
         // 点标题栏 X（以及系统菜单关闭、Alt+F4）都是 WM_SYSCOMMAND + SC_CLOSE：
         // 在这里拦下先问「最小化还是退出」，不交给默认处理，所以窗口不会直接关掉。
         if (m.Msg == NativeMethods.WM_SYSCOMMAND

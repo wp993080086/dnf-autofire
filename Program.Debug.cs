@@ -5,7 +5,7 @@ namespace DnfAutoFire;
 #if DEBUG
 // 调试入口：只在 Debug 构建里编译，发布版整段代码不进入程序集。
 // 每个命令行开关对应一个 Run* 方法，Main 只负责分发。
-// Release 构建里整段（含 17 个开关字符串）不进入程序集。
+// Release 构建里整段（含全部开关字符串）不进入程序集。
 internal static partial class Program
 {
     /// <summary>命中调试命令行则执行并返回 true，调用方直接结束进程；没命中返回 false，继续走正式流程。</summary>
@@ -32,6 +32,9 @@ internal static partial class Program
         if (args.Length >= 2 && args[1] == "--keynametest") { RunKeyNameTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--keycaptest") { RunKeyCapTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--xbuttontest") { RunXButtonTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--hotkeyfallbacktest") { RunHotkeyFallbackTest(args); return true; }
+        if (args.Length >= 3 && args[1] == "--instancetest") { RunInstanceTest(args); return true; }
+        if (args.Length >= 4 && args[1] == "--hotkeyoccupy") { RunHotkeyOccupy(args); return true; }
         return false;
     }
 
@@ -147,6 +150,62 @@ internal static partial class Program
         }
 
         Console.WriteLine(bad == 0 ? "[xb] PASS" : $"[xb] FAIL（{bad} 处异常）");
+    }
+
+    // 调试用：dnf-autofire --hotkeyfallbacktest 校验备用热键的挑选规则
+    private static void RunHotkeyFallbackTest(string[] args)
+    {
+        int bad = 0;
+        void Check(string label, string? got, string? want)
+        {
+            if (got != want) { Console.WriteLine($"[hkf] BAD {label} 期望 {want ?? "(null)"} 实际 {got ?? "(null)"}"); bad++; }
+        }
+
+        Check("默认四键已占", HotkeyFallback.Pick(new[] { "F6", "F8", "F9", "F10" }), "F1");
+        Check("大小写与空格", HotkeyFallback.Pick(new[] { " f1 ", "F2" }), "F3");
+        Check("全部占满", HotkeyFallback.Pick(HotkeyFallback.Candidates), null);
+        Check("无占用", HotkeyFallback.Pick(Array.Empty<string>()), "F1");
+        Console.WriteLine(bad == 0 ? "[hkf] PASS" : $"[hkf] FAIL（{bad} 处异常）");
+    }
+
+    // 调试用：dnf-autofire --hotkeyoccupy F6 10 强占一个热键若干秒，用来验证本程序的自动换键
+    private static void RunHotkeyOccupy(string[] args)
+    {
+        if (!int.TryParse(args[2].TrimStart('F', 'f'), out int n) || n is < 1 or > 12) return;
+        using var form = new Form();
+        _ = form.Handle; // 访问 Handle 即强制创建句柄
+        bool ok = NativeMethods.RegisterHotKey(form.Handle, 99, 0, (uint)(0x70 + n - 1));
+        Console.WriteLine($"[occupy] {args[2]} registered={ok}");
+        using var timer = new System.Windows.Forms.Timer
+        {
+            Interval = int.TryParse(args[3], out int sec) ? Math.Max(1, sec) * 1000 : 10000
+        };
+        timer.Tick += (_, _) => Application.ExitThread();
+        timer.Start();
+        Application.Run();
+    }
+
+    // 调试用：dnf-autofire --instancetest listen 持锁并隐藏窗口；--instancetest notify 模拟第二份实例
+    private static void RunInstanceTest(string[] args)
+    {
+        if (args[2] == "notify")
+        {
+            Console.WriteLine($"[inst] notify msg={SingleInstanceSignal.Message}");
+            SingleInstanceSignal.Notify();
+            return;
+        }
+
+        using var mutex = new Mutex(true, Program.SingleInstanceName, out bool createdNew);
+        Console.WriteLine(createdNew ? "[inst] mutex acquired" : "[inst] mutex already held");
+        using var form = new MainForm();
+        form.VisibleChanged += (_, _) => Console.WriteLine($"[inst] visible={form.Visible}");
+        form.Show();
+        Application.DoEvents();
+        form.Hide();
+        using var timer = new System.Windows.Forms.Timer { Interval = 8000 };
+        timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
+        timer.Start();
+        Application.Run(form);
     }
 
     // 调试用：dnf-autofire --savetest <最终间隔秒> [等待毫秒]

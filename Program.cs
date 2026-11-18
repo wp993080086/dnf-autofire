@@ -2,6 +2,8 @@ namespace DnfAutoFire;
 
 internal static partial class Program
 {
+    internal const string SingleInstanceName = "DnfAutoFire_SingleInstance";
+
     [STAThread]
     private static void Main()
     {
@@ -14,12 +16,12 @@ internal static partial class Program
         if (TryRunDebugCommand(Environment.GetCommandLineArgs())) return;
 #endif
 
-        // 单实例保护：双开会导致热键冲突与双重连发
-        using var mutex = new Mutex(true, "DnfAutoFire_SingleInstance", out bool createdNew);
+        // 单实例保护：双开会导致热键冲突与双重连发。
+        // 第二份实例不再只弹提示，而是广播一条注册消息让已运行的实例把窗口叫到前台。
+        using var mutex = new Mutex(true, SingleInstanceName, out bool createdNew);
         if (!createdNew)
         {
-            MessageBox.Show("DNF 连发工具已经在运行中。", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SingleInstanceSignal.Notify();
             return;
         }
 

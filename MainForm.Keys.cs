@@ -125,7 +125,7 @@ public partial class MainForm : Form
     private void AddRow(string key, int ms, bool enabled, string stopMode = "hold", int stopValue = 0)
     {
         var row = new RowControls();
-        var panel = new AntPanel { Size = new Size(RowWidth, RowH), BackColor = Color.White };
+        var panel = new AntPanel { Size = new Size(RowWidth, RowH), BackColor = Color.Transparent };
         row.RowPanel = panel;
 
         row.Chk = new AntCheckBox

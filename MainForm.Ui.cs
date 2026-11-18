@@ -42,10 +42,10 @@ public partial class MainForm : Form
     private void BuildUi()
     {
         // 主区域（Tab + 配置页）：三个区域（主区/启动区/设置区）以 2px 深色边框分隔，无留白卡片
-        var pnlMain = new AntPanel { Location = new Point(2, 2), Size = new Size(636, 302), BackColor = Color.White };
+        var pnlMain = new AntPanel { Location = new Point(2, 2), Size = new Size(636, 302), BackColor = Color.Transparent };
 
         // 自定义 Tab 头（AntD 风格：文字 + 蓝色下划线，下边框 1px 样式不变）
-        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(636, 44), BackColor = Color.White, TabStop = true, TabIndex = 0 };
+        tabHeader = new TabHeaderPanel { Location = Point.Empty, Size = new Size(636, 44), BackColor = Color.Transparent, TabStop = true, TabIndex = 0 };
         tabHeader.Paint += TabHeader_Paint;
         tabHeader.MouseClick += TabHeader_Click;
         tabHeader.MouseMove += TabHeader_Move;
@@ -72,7 +72,7 @@ public partial class MainForm : Form
             {
                 Location = new Point(0, 44),
                 Size = new Size(636, 258),
-                BackColor = Color.White,
+                BackColor = Color.Transparent,
                 Visible = i == TabKeys,
                 TabIndex = i + 1   // 排在 tabHeader 之后：Tab 键/tab 顺序里页签始终是第一个可选控件
             };
@@ -88,7 +88,7 @@ public partial class MainForm : Form
 
         // 启动区（左下）：按键/鼠标页是一个主按钮；录制页换成「开始录制 / 开始回放」两个等宽按钮。
         // 设置区（右下）内容不多，分隔线右移 100px：启动区 394、设置区 240，按钮能铺开、右侧也不空
-        var pnlRun = new AntPanel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.White };
+        var pnlRun = new AntPanel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.Transparent };
         const int RunBtnW = 175;              // (366 - 间距 16) / 2，两个按钮均分同一块宽度
         const int RunBtnGap = 16;
         btnMain = new AntButton
@@ -144,7 +144,7 @@ public partial class MainForm : Form
         // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连发热键（默认 F6）、
         // 鼠标页编辑连点热键（默认 F8）；两个热键同时全局生效。
         // 分隔线右移后只剩 240 宽：标签 14 起、下拉 86 起 120 宽，右侧仍留 34 的余量给说明文字
-        var pnlSet = new AntPanel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.White };
+        var pnlSet = new AntPanel { Location = new Point(398, 306), Size = new Size(240, 92), BackColor = Color.Transparent };
         lblHotkey = new Label { Text = "连发热键", Location = new Point(14, 12), AutoSize = true, ForeColor = AntStyle.TextSec };
         lblMode = new Label { Text = "连发模式", Location = new Point(14, 44), AutoSize = true, ForeColor = AntStyle.TextSec };
 
@@ -396,7 +396,7 @@ public partial class MainForm : Form
         {
             Location = new Point(16, 40),
             Size = new Size(RowWidth + 12, 210),
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         scrollBar = new FlatScrollBar
         {
@@ -410,7 +410,7 @@ public partial class MainForm : Form
         {
             Location = new Point(0, 0),
             Size = new Size(RowWidth, RowH),
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
 
         pnlRows.Controls.Add(pnlContent);
@@ -437,7 +437,7 @@ public partial class MainForm : Form
                  })
         {
             var row = new MouseRow { Button = button };
-            var panel = new AntPanel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.White };
+            var panel = new AntPanel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.Transparent };
             row.RowPanel = panel;
 
             row.Chk = new AntCheckBox

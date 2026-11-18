@@ -119,6 +119,10 @@ public partial class MainForm : Form
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
 
+    // 整窗背景渐变：顶部 12% 主题色(#E8F2FF) → 一半高度处纯白，下半纯白。
+    // 各大容器设为透明，透出这张图；控件本身仍是白底卡片，文字颜色不动。
+    private Bitmap? _background;
+
     public MainForm()
     {
         _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)
@@ -130,8 +134,11 @@ public partial class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.White; // 无留白卡片：白色底 + 深色边框划分区域
+        BackColor = Color.White;
         ClientSize = new Size(640, 400);
+        _background = BuildBackgroundGradient(ClientSize);
+        BackgroundImage = _background;
+        BackgroundImageLayout = ImageLayout.None;
 
         BuildUi();
         BuildTray();
@@ -224,7 +231,22 @@ public partial class MainForm : Form
             trayIcon.Visible = false;
             trayIcon.Dispose();
             _appIcon.Dispose();
+            BackgroundImage = null;
+            _background?.Dispose();
         };
+    }
+
+    /// <summary>整窗背景渐变：顶部 12% 主题色到一半高度处纯白，下半纯白。</summary>
+    private static Bitmap BuildBackgroundGradient(Size size)
+    {
+        var bmp = new Bitmap(Math.Max(1, size.Width), Math.Max(1, size.Height));
+        using var g = Graphics.FromImage(bmp);
+        using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+            new Point(0, 0), new Point(0, Math.Max(1, size.Height / 2)),
+            Color.FromArgb(232, 242, 255), Color.White);
+        g.FillRectangle(brush, 0, 0, bmp.Width, Math.Max(1, size.Height / 2));
+        g.FillRectangle(Brushes.White, 0, size.Height / 2, bmp.Width, bmp.Height - size.Height / 2);
+        return bmp;
     }
 
     /// <summary>主按钮开关当前 Tab 对应的引擎（按钮点击与热键共用此入口）。</summary>

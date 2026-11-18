@@ -17,7 +17,7 @@ public partial class MainForm : Form
         {
             Location = new Point(16, 41),
             Size = new Size(RowWidth + 12, RecListHeight),
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         recScroll = new FlatScrollBar
         {
@@ -30,7 +30,7 @@ public partial class MainForm : Form
         {
             Location = new Point(0, 0),
             Size = new Size(RowWidth, RecListHeight),
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         pnlRecRows.Controls.Add(pnlRecContent);
         pnlRecRows.Controls.Add(recScroll);
@@ -42,7 +42,7 @@ public partial class MainForm : Form
             Location = new Point(0, 50),
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary,
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         pnlRecRows.Controls.Add(lblRecEmpty);
         lblRecEmpty.BringToFront();
@@ -177,7 +177,7 @@ public partial class MainForm : Form
             {
                 Location = new Point(0, i * RecRowH),
                 Size = new Size(RowWidth, RecRowH),
-                BackColor = Color.White
+                BackColor = Color.Transparent
             };
 
             var chk = new AntCheckBox

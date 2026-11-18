@@ -102,8 +102,8 @@ internal sealed class AntButton : Control
     public AntButton()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                 ControlStyles.ResizeRedraw, true);
-        BackColor = Color.White; // 圆角外露出的四角与卡片底色一致
+                 ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent; // 圆角外露出的四角透出窗体渐变背景
         Cursor = Cursors.Hand;
         TabStop = false;
     }
@@ -175,7 +175,9 @@ internal sealed class AntButton : Control
         }
 
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        AntStyle.FillRounded(e.Graphics, bg, new Rectangle(0, 0, Width, Height), 6);
+        // Text 按钮平时不铺白底，透出窗体渐变；悬停时的浅蓝底照常画。其余类型保留实心底色。
+        if (!(Kind == AntKind.Text && bg == Color.White))
+            AntStyle.FillRounded(e.Graphics, bg, new Rectangle(0, 0, Width, Height), 6);
         if (border.HasValue)
             AntStyle.DrawRounded(e.Graphics, border.Value, new Rectangle(0, 0, Width - 1, Height - 1), 6);
         TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(0, 0, Width, Height), text,
@@ -206,10 +208,12 @@ internal sealed class AntCheckBox : Control
     public AntCheckBox()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                 ControlStyles.SupportsTransparentBackColor, true);
         Cursor = Cursors.Hand;
         TabStop = false;
         Size = new Size(64, 30);
+        BackColor = Color.Transparent; // 不铺白底，透出窗体的渐变背景
     }
 
     protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); _hover = true; Invalidate(); }
@@ -271,6 +275,12 @@ internal class AntPanel : Panel
 {
     private const int WM_SETCURSOR = 0x0020;
     private const int HTCLIENT = 1;
+
+    public AntPanel()
+    {
+        // 支持 BackColor=Transparent：容器不铺底色，透出窗体那张渐变背景图
+        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+    }
 
     protected override void WndProc(ref Message m)
     {

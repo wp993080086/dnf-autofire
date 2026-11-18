@@ -53,27 +53,34 @@ internal static partial class Program
         using (var form = new MainForm())
             Console.WriteLine($"[about] versionLabel: {form.DebugVersionLabelInfo()}");
 
-        // 行为验证：真正触发版本标签的 Click，确认弹出关于窗口（用 timer 自动关闭模态框）
+        // 行为验证：在消息循环内触发版本标签的 Click，确认弹出关于窗口。
+        // Click 里是 ShowDialog（模态且阻塞），必须在 Application.Run 之后、借助 BeginInvoke
+        // 在 ShowDialog 的嵌套消息循环里关闭弹窗；否则 timer 会在 Run 之前就把 host 关掉，
+        // 导致 Application.Run(host) 试图重新显示已释放的窗体，抛 ObjectDisposedException。
         using var host = new MainForm();
         host.Show();
         var lbl = host.Controls.Find("lblVersionAbout", true).FirstOrDefault();
         if (lbl != null)
         {
-            var closeTimer = new System.Windows.Forms.Timer { Interval = 300 };
-            closeTimer.Tick += (_, _) =>
-            {
-                closeTimer.Stop();
-                closeTimer.Dispose();
-                var about = Application.OpenForms.Cast<Form>().FirstOrDefault(f => f is AboutForm);
-                Console.WriteLine($"[about] click->dialog: {(about != null ? "SHOWN " + about.Text : "NONE")}");
-                about?.Close();
-                host.Close();
-            };
-            closeTimer.Start();
-            // 反射调用 protected OnClick，等价于用户点击
             var onClick = typeof(Control).GetMethod("OnClick",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            onClick?.Invoke(lbl, new object[] { EventArgs.Empty });
+            var verifyTimer = new System.Windows.Forms.Timer { Interval = 300 };
+            verifyTimer.Tick += (_, _) =>
+            {
+                verifyTimer.Stop();
+                verifyTimer.Dispose();
+                // BeginInvoke 排进 ShowDialog 的嵌套消息循环：先记录弹窗，再关闭弹窗和 host
+                host.BeginInvoke(new Action(() =>
+                {
+                    var dlg = Application.OpenForms.Cast<Form>().FirstOrDefault(f => f is AboutForm);
+                    Console.WriteLine($"[about] click->dialog: {(dlg != null ? "SHOWN " + dlg.Text : "NONE")}");
+                    dlg?.Close();
+                    host.Close();
+                }));
+                // 反射调用 protected OnClick，等价于用户点击；ShowDialog 在此阻塞直到上面的委托关闭弹窗
+                onClick?.Invoke(lbl, new object[] { EventArgs.Empty });
+            };
+            verifyTimer.Start();
             Application.Run(host);
         }
         about.StartPosition = FormStartPosition.Manual;

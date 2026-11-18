@@ -537,5 +537,17 @@ public partial class MainForm : Form
         foreach (ToolStripItem item in trayMenu.Items)
             Console.WriteLine($"[tray] {item.Text}");
     }
+
+    /// <summary>调试入口：读 Tab 头实际样式位，确认双缓冲已生效（hover 不闪）。</summary>
+    internal void DebugDumpTabStyle()
+    {
+        var getStyle = typeof(Control).GetMethod("GetStyle",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        bool Read(ControlStyles s) => (bool)getStyle.Invoke(tabHeader, new object[] { s })!;
+        Console.WriteLine($"[tab] AllPaintingInWmPaint={Read(ControlStyles.AllPaintingInWmPaint)} " +
+                          $"OptimizedDoubleBuffer={Read(ControlStyles.OptimizedDoubleBuffer)} " +
+                          $"UserPaint={Read(ControlStyles.UserPaint)} " +
+                          $"Selectable={Read(ControlStyles.Selectable)}");
+    }
 }
 #endif

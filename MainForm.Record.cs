@@ -452,8 +452,6 @@ public partial class MainForm : Form
         bool rec = _recorder != null;
         bool play = _player != null;
         bool locked = rec || play;
-        bool canPlay = play || (!rec && SelectedProfile() != null);
-
         SyncRecordButtons();
 
         if (rec)
@@ -480,13 +478,6 @@ public partial class MainForm : Form
         numPlayValue.Enabled = !locked && cboPlayMode.SelectedIndex != 1;
         numPlayGap.Enabled = !locked;
 
-        if (trayRecordItem != null)
-            trayRecordItem.Text = rec ? "停止录制" : "开始录制";
-        if (trayPlayItem != null)
-        {
-            trayPlayItem.Text = play ? "停止回放" : "开始回放";
-            trayPlayItem.Enabled = canPlay;
-        }
         if (cboStartKey != null && _tabIndex == TabRecord) cboStartKey.Enabled = !locked;
         if (cboPlayKey != null && _tabIndex == TabRecord) cboPlayKey.Enabled = !locked;
         UpdateTrayText();

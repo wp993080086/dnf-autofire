@@ -56,7 +56,13 @@ public partial class MainForm : Form
     /// </summary>
     private sealed class TabHeaderPanel : Panel
     {
-        public TabHeaderPanel() => SetStyle(ControlStyles.Selectable, true);
+        public TabHeaderPanel()
+        {
+            // hover 时频繁 Invalidate：不开双缓冲会走「擦白底→再绘制」两步，鼠标划过页签就闪
+            SetStyle(ControlStyles.Selectable | ControlStyles.UserPaint |
+                     ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw, true);
+        }
     }
 
     /// <summary>

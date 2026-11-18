@@ -38,6 +38,7 @@ internal static partial class Program
         if (args.Length >= 3 && args[1] == "--crashshot") { RunCrashShot(args); return true; }
         if (args.Length >= 2 && args[1] == "--logpathtest") { RunLogPathTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--traytest") { RunTrayTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--tabstyletest") { RunTabStyleTest(args); return true; }
         return false;
     }
 
@@ -194,6 +195,16 @@ internal static partial class Program
         form.Show();
         Application.DoEvents();
         form.DebugDumpTrayMenu();
+        form.Close();
+    }
+
+    // 调试用：dnf-autofire --tabstyletest 读 Tab 头样式位，确认 hover 双缓冲已开启
+    private static void RunTabStyleTest(string[] args)
+    {
+        using var form = new MainForm();
+        form.Show();
+        Application.DoEvents();
+        form.DebugDumpTabStyle();
         form.Close();
     }
 

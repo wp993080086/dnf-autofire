@@ -118,8 +118,6 @@ public partial class MainForm : Form
     private readonly Icon _appIcon; // 应用图标：EXE 内嵌资源，窗口与托盘共用
     private NotifyIcon trayIcon = null!;
     private ContextMenuStrip trayMenu = null!;
-    private ToolStripMenuItem trayRecordItem = null!;
-    private ToolStripMenuItem trayPlayItem = null!;
 
     public MainForm()
     {
@@ -496,15 +494,6 @@ public partial class MainForm : Form
         trayMenu = new ContextMenuStrip();
         trayMenu.Items.Add("显示窗口", null, (_, _) => ShowWindow());
         trayMenu.Items.Add(new ToolStripSeparator());
-        trayRecordItem = new ToolStripMenuItem("开始录制");
-        trayRecordItem.Click += (_, _) => ToggleRecording();
-        trayMenu.Items.Add(trayRecordItem);
-
-        // 回放期间主窗口在托盘里，这里留一个出口（热键注册失败时也能停）
-        trayPlayItem = new ToolStripMenuItem("开始回放");
-        trayPlayItem.Click += (_, _) => TogglePlayback();
-        trayMenu.Items.Add(trayPlayItem);
-
         trayMenu.Items.Add(new ToolStripMenuItem("打开日志", null, (_, _) =>
         {
             string? error = Logger.OpenLog();

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace DnfAutoFire;
 
 /// <summary>
@@ -9,6 +11,7 @@ internal static class Logger
     private static readonly object Sync = new();
     private const int MaxEntries = 200;
     private static int _lineCount = -1; // -1 = 还没读过盘；避免每次写都全量读一遍
+    private static int _reported;       // 异常连环触发时只弹一次窗口
 
     public static string LogPath => Path.Combine(AppPaths.DataDir, "error.log");
 
@@ -16,9 +19,43 @@ internal static class Logger
     public static void Hook()
     {
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_, e) => Error("UI", e.Exception);
+        Application.ThreadException += (_, e) => Report("UI", e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            Error("AppDomain", e.ExceptionObject as Exception);
+            Report("AppDomain", e.ExceptionObject as Exception);
+    }
+
+    /// <summary>先落盘，再弹一次异常窗口；弹窗自身失败不能盖掉原来的异常。</summary>
+    internal static void Report(string context, Exception? ex)
+    {
+        Error(context, ex);
+        if (Interlocked.Exchange(ref _reported, 1) != 0) return;
+        try { CrashReportForm.Show(context, ex, LogPath); }
+        catch { /* 日志已经写下了，弹窗失败就算了 */ }
+    }
+
+    /// <summary>
+    /// 用系统默认程序打开日志，文件不存在时先建一个空文件。
+    /// 返回 null 表示成功；调用方负责把错误显示给用户。
+    /// </summary>
+    public static string EnsureLogFile()
+    {
+        if (!File.Exists(LogPath)) File.WriteAllText(LogPath, "");
+        return LogPath;
+    }
+
+    public static string? OpenLog()
+    {
+        try
+        {
+            EnsureLogFile();
+            Process.Start(new ProcessStartInfo(LogPath) { UseShellExecute = true });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Error("OpenLog", ex);
+            return ex.Message;
+        }
     }
 
     public static void Error(string context, Exception? ex)

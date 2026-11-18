@@ -530,5 +530,12 @@ public partial class MainForm : Form
             _loading = oldLoading;
         }
     }
+
+    /// <summary>调试入口：打印托盘菜单项，确认「打开日志」等出口都在。</summary>
+    internal void DebugDumpTrayMenu()
+    {
+        foreach (ToolStripItem item in trayMenu.Items)
+            Console.WriteLine($"[tray] {item.Text}");
+    }
 }
 #endif

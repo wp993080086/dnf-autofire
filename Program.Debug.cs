@@ -35,6 +35,9 @@ internal static partial class Program
         if (args.Length >= 2 && args[1] == "--hotkeyfallbacktest") { RunHotkeyFallbackTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--instancetest") { RunInstanceTest(args); return true; }
         if (args.Length >= 4 && args[1] == "--hotkeyoccupy") { RunHotkeyOccupy(args); return true; }
+        if (args.Length >= 3 && args[1] == "--crashshot") { RunCrashShot(args); return true; }
+        if (args.Length >= 2 && args[1] == "--logpathtest") { RunLogPathTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--traytest") { RunTrayTest(args); return true; }
         return false;
     }
 
@@ -166,6 +169,39 @@ internal static partial class Program
         Check("全部占满", HotkeyFallback.Pick(HotkeyFallback.Candidates), null);
         Check("无占用", HotkeyFallback.Pick(Array.Empty<string>()), "F1");
         Console.WriteLine(bad == 0 ? "[hkf] PASS" : $"[hkf] FAIL（{bad} 处异常）");
+    }
+
+    // 调试用：dnf-autofire --crashshot <png> 离屏渲染异常弹窗，检查布局与文案
+    private static void RunCrashShot(string[] args)
+    {
+        using var form = new CrashReportForm("UI",
+            new InvalidOperationException("[crashtest] 这是一条用于检查弹窗布局的模拟异常",
+                new Exception("内层异常示例")), Logger.LogPath);
+        form.StartPosition = FormStartPosition.Manual;
+        form.Location = new Point(-3000, -3000);
+        form.Show();
+        Application.DoEvents();
+        using var bmp = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
+        bmp.Save(args[2], ImageFormat.Png);
+        form.Close();
+    }
+
+    // 调试用：dnf-autofire --traytest 打印托盘菜单，确认「打开日志」入口存在
+    private static void RunTrayTest(string[] args)
+    {
+        using var form = new MainForm();
+        form.Show();
+        Application.DoEvents();
+        form.DebugDumpTrayMenu();
+        form.Close();
+    }
+
+    // 调试用：dnf-autofire --logpathtest 确认日志路径与"文件不存在时先创建"的逻辑
+    private static void RunLogPathTest(string[] args)
+    {
+        string path = Logger.EnsureLogFile();
+        Console.WriteLine($"[log] path={path} exists={File.Exists(path)}");
     }
 
     // 调试用：dnf-autofire --hotkeyoccupy F6 10 强占一个热键若干秒，用来验证本程序的自动换键

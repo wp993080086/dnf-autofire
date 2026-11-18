@@ -505,6 +505,13 @@ public partial class MainForm : Form
         trayPlayItem.Click += (_, _) => TogglePlayback();
         trayMenu.Items.Add(trayPlayItem);
 
+        trayMenu.Items.Add(new ToolStripMenuItem("打开日志", null, (_, _) =>
+        {
+            string? error = Logger.OpenLog();
+            if (error != null)
+                MessageBox.Show("打开日志失败：" + error, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }));
+
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("退出程序", null, (_, _) => ExitApp());
 

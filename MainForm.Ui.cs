@@ -209,7 +209,7 @@ public partial class MainForm : Form
         AttachClearFocus(Controls);
     }
 
-    /// <summary>区域分隔：仅在模块相邻处画 2px 浅灰线（颜色与 Tab 下边框一致），无外框。</summary>
+    /// <summary>区域分隔：仅在模块相邻处画 2px 浅灰线，无外框。此处在下半纯白区，沿用较浅的 Split。</summary>
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -240,7 +240,8 @@ public partial class MainForm : Form
     {
         var g = e.Graphics;
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using (var line = new Pen(AntStyle.Split))
+        // 这条线压在顶部渐变(#E8F2FF→白)上，普通 Split(#F0F0F0)会融进背景看不清，用更深的 SplitStrong
+        using (var line = new Pen(AntStyle.SplitStrong))
             g.DrawLine(line, 0, 43, tabHeader.Width, 43);
 
         _tabRects.Clear();
@@ -380,6 +381,10 @@ public partial class MainForm : Form
     {
         AddPageTitle(page, "鼠标连点", $"间隔范围 {MouseMinMs}-{MouseMaxMs}ms，步进 {MouseStepMs}");
 
+        // 按钮名占固定列宽（取中文名宽度）：X1/X2 是 ASCII 比两个汉字窄，
+        // 若按各自文字宽度排，后两行会整体左移、行尾短一截。五行左边缘统一到同一列。
+        int btnNameW = Math.Max(RowTextWidth("左键", bold: true), RowTextWidth("X1", bold: true));
+
         foreach (var (button, label, y) in new[]
                  {
                      ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120),
@@ -399,7 +404,7 @@ public partial class MainForm : Form
             };
             // 与按键页同构：文字宽度按实测值顺排（Label.AutoSize 要挂到父控件后才生效，布局时不能读 Right）
             var lblBtn = MakeRowText(label, 58, AntStyle.TextPri, bold: true);
-            int x = 58 + RowTextWidth(label, bold: true) + 6;
+            int x = 58 + btnNameW + 6;
             var lblGap = MakeRowText("键，间隔", x);
             x += RowTextWidth("键，间隔") + 8;
             row.NumMs = new AntNumber

@@ -29,6 +29,7 @@ internal static class AntStyle
     public static readonly Color DangerBg = Color.FromArgb(255, 235, 235);
     public static readonly Color Border = Color.FromArgb(217, 217, 217);       // #D9D9D9
     public static readonly Color Split = Color.FromArgb(240, 240, 240);        // #F0F0F0
+    public static readonly Color SplitStrong = Color.FromArgb(196, 202, 211);  // #C4CAD3 渐变背景上才看得清的分隔线
     public static readonly Color TextPri = Color.FromArgb(38, 38, 38);         // rgba(0,0,0,0.88)
     public static readonly Color TextSec = Color.FromArgb(89, 89, 89);         // rgba(0,0,0,0.65)
     public static readonly Color TextTertiary = Color.FromArgb(140, 140, 140); // rgba(0,0,0,0.45)

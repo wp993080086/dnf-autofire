@@ -278,11 +278,6 @@ public partial class MainForm : Form
         int idx = HitTab(e.Location);
         if (idx < 0 || idx == _tabIndex) return;
 
-        // 交叉淡化：必须在 Visible 切换前截下旧页。若上一轮淡化还在，先收掉，
-        // 否则截到的是半透明蒙层而不是页面内容。
-        StopFade();
-        var oldShot = CapturePage(_pages[_tabIndex]);
-
         // 平滑位移动画：从当前位置滑到目标 Tab
         var from = _underlineCurrent.IsEmpty ? UnderlineOf(_tabIndex) : _underlineCurrent;
         _animFrom = from;
@@ -298,7 +293,6 @@ public partial class MainForm : Form
         tabHeader.Invalidate();
         RefreshRunCard(); // 主按钮与"当前控制"标识跟随 Tab 切换
         SyncHotkeyUI();   // 热键下拉框跟随 Tab
-        BeginPageFade(oldShot); // 旧页截图盖住新页，再平滑淡出
     }
 
     private void TabAnim_Tick(object? sender, EventArgs e)
@@ -316,58 +310,6 @@ public partial class MainForm : Form
             _tabAnimTimer.Stop();
         }
         tabHeader.Invalidate();
-    }
-
-    /// <summary>切页截屏：用控件自身的坐标变换取屏幕矩形，SystemAware 下不受 DPI 缩放影响。</summary>
-    private static Bitmap CapturePage(Control page)
-    {
-        var rect = page.RectangleToScreen(page.ClientRectangle);
-        var bmp = new Bitmap(rect.Width, rect.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(bmp);
-        g.CopyFromScreen(rect.Location, Point.Empty, rect.Size);
-        return bmp;
-    }
-
-    /// <summary>收掉正在进行的淡化：连续快速切页时，避免截到蒙层本身。</summary>
-    private void StopFade()
-    {
-        _fadeTimer.Stop();
-        if (_veil != null && !_veil.IsDisposed) _veil.Hide();
-    }
-
-    /// <summary>
-    /// 页面切换交叉淡化：旧页截图全不透明盖住新页，再淡出到 0。
-    /// 子控件画不出真正的 alpha（GDI 会丢弃），只有独立的无激活顶层窗口能整体改 Opacity。
-    /// </summary>
-    private void BeginPageFade(Bitmap oldShot)
-    {
-        var page = _pages[_tabIndex];
-        if (_veil == null || _veil.IsDisposed)
-            _veil = new FadeVeil { Owner = this };
-        _veil.Bounds = page.RectangleToScreen(page.ClientRectangle);
-        _veil.SetShot(oldShot);
-        _veil.Show();
-        _veil.Update(); // 先把旧页画出来，避免露出新页一帧（那正是"闪"的来源）
-        _fadeElapsed = 0;
-        _fadeTimer.Start();
-    }
-
-    private void Fade_Tick(object? sender, EventArgs e)
-    {
-        if (_veil == null || _veil.IsDisposed || !Visible)
-        {
-            _fadeTimer.Stop();
-            return;
-        }
-        _fadeElapsed += _fadeTimer.Interval;
-        float t = Math.Min(1f, (float)_fadeElapsed / FadeMs);
-        t = t * t * (3 - 2 * t); // smoothstep：起止更柔和
-        _veil.Opacity = 1 - t;
-        if (t >= 1f)
-        {
-            _fadeTimer.Stop();
-            _veil.Hide();
-        }
     }
 
     private void TabHeader_Move(object? sender, MouseEventArgs e)

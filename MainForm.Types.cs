@@ -1,6 +1,6 @@
 namespace DnfAutoFire;
 
-// 页内嵌套类型：按键行/鼠标行控件组、滚轮过滤器、Tab 头、切页白幕。
+// 页内嵌套类型：按键行/鼠标行控件组、滚轮过滤器、Tab 头。
 public partial class MainForm : Form
 {
     // ---------- 配置行 ----------
@@ -65,73 +65,4 @@ public partial class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// 页面切换用的旧页截图蒙层：无边框、不在任务栏、不抢焦点、鼠标点击穿透。
-    /// 只有顶层窗口能整体半透明（Form.Opacity 走分层窗口），普通子控件做不到。
-    /// 截图从 100% 淡到 0，视觉上就是旧页渐隐、新页渐显的交叉淡化。
-    /// </summary>
-    private sealed class FadeVeil : Form
-    {
-        private Bitmap? _shot;
-
-        public FadeVeil()
-        {
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.Manual;
-            TopMost = true; // 必须显式置顶：否则 owned 窗口会被 TopMost 的宿主压到下面
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.OptimizedDoubleBuffer, true);
-            Opacity = 1.0;
-        }
-
-        /// <summary>装进旧页截图并恢复全不透明，调用方 Show 后立即盖住新页。</summary>
-        public void SetShot(Bitmap shot)
-        {
-            _shot?.Dispose();
-            _shot = shot;
-            Opacity = 1.0;
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e) { }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            if (_shot != null) e.Graphics.DrawImageUnscaled(_shot, 0, 0);
-        }
-
-        protected override bool ShowWithoutActivation => true;
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                const int WS_EX_NOACTIVATE = 0x08000000; // 不抢焦点
-                const int WS_EX_TOOLWINDOW = 0x00000080; // 不进 Alt+Tab
-                var cp = base.CreateParams;
-                // 这里不能加 WS_EX_TRANSPARENT：它会让窗口排到宿主窗口下面被完全盖住，
-                // 蒙层就永远看不见（之前"白幕淡入"实际只是硬切）。穿透改用下面的 NCHITTEST。
-                cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-                return cp;
-            }
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            const int WM_NCHITTEST = 0x0084;
-            const int HTTRANSPARENT = -1;
-            if (m.Msg == WM_NCHITTEST)
-            {
-                m.Result = (IntPtr)HTTRANSPARENT; // 鼠标穿透，不挡下面的控件
-                return;
-            }
-            base.WndProc(ref m);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing) _shot?.Dispose();
-            base.Dispose(disposing);
-        }
-    }
 }

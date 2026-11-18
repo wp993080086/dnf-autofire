@@ -65,12 +65,6 @@ public partial class MainForm : Form
     private readonly int[] _tabTextWidths = new int[TabTitles.Length]; // 纯文字宽度，下划线据此对称收短
     private int _underlineWidth;  // 所有页签共用的下划线宽度（取最短文字宽），保证长度一致
 
-    // 页面切换交叉淡化：切页前截下旧页，切页后用旧页截图盖住新页再淡出到 0。
-    // 子控件不支持逐像素 alpha，只有顶层分层窗口能整体改 Opacity。
-    private FadeVeil? _veil;
-    private readonly System.Windows.Forms.Timer _fadeTimer;
-    private int _fadeElapsed;
-    private const int FadeMs = 280;
     private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 
@@ -146,9 +140,6 @@ public partial class MainForm : Form
         // Tab 下划线滑动动画
         _tabAnimTimer = new System.Windows.Forms.Timer { Interval = 15 };
         _tabAnimTimer.Tick += TabAnim_Tick;
-        // 页面切换白幕淡入
-        _fadeTimer = new System.Windows.Forms.Timer { Interval = 15 };
-        _fadeTimer.Tick += Fade_Tick;
         // 回放进度：200ms 刷新「第 N 次 · mm:ss」，同时驱动右下角状态条
         _playTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _playTimer.Tick += PlayTimer_Tick;
@@ -217,9 +208,7 @@ public partial class MainForm : Form
         {
             Application.RemoveMessageFilter(_wheelFilter);
             _tabAnimTimer.Dispose();
-            _fadeTimer.Dispose();
             _playTimer.Dispose();
-            _veil?.Dispose();
             _fontBold.Dispose();
             _tabFont.Dispose();
             _keyTip.Dispose();
@@ -319,15 +308,6 @@ public partial class MainForm : Form
         if (_engine.Running || _mouseEngine.Running || _recorder != null || _player != null)
             trayIcon.ShowBalloonTip(1600, "DNF 连发",
                 "仍在后台运行，双击托盘图标可重新打开。", ToolTipIcon.Info);
-    }
-
-    /// <summary>主窗口隐藏（最小化到托盘）时立刻收起白幕，避免屏幕上残留一块白色浮层。</summary>
-    protected override void OnVisibleChanged(EventArgs e)
-    {
-        base.OnVisibleChanged(e);
-        if (Visible || _veil == null || _veil.IsDisposed) return;
-        _fadeTimer.Stop();
-        _veil.Hide();
     }
 
     private void ExitApp()

@@ -31,6 +31,7 @@ internal static partial class Program
         if (args.Length >= 3 && args[1] == "--savetest") { RunSaveTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--keynametest") { RunKeyNameTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--keycaptest") { RunKeyCapTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--xbuttontest") { RunXButtonTest(args); return true; }
         return false;
     }
 
@@ -86,6 +87,66 @@ internal static partial class Program
             if (KeyNames.FromKeys(key) != null) { Console.WriteLine($"[name] BAD {key} 应判为不支持"); bad++; }
 
         Console.WriteLine(bad == 0 ? "[name] PASS" : $"[name] FAIL（{bad} 处异常）");
+    }
+
+    // 调试用：dnf-autofire --xbuttontest 校验侧键的消息解析、注入标志与配置映射
+    private static void RunXButtonTest(string[] args)
+    {
+        int bad = 0;
+        foreach (var (data, want) in new (uint Data, int? Vk)[]
+                 {
+                     ((uint)NativeMethods.XBUTTON1 << 16, NativeMethods.VK_XBUTTON1),
+                     ((uint)NativeMethods.XBUTTON2 << 16, NativeMethods.VK_XBUTTON2),
+                     (0, null), (3u << 16, null)
+                 })
+        {
+            int? got = MouseHook.XButtonVk(data);
+            if (got != want)
+            {
+                Console.WriteLine($"[xb] BAD mouseData=0x{data:X8} 期望 {want} 实际 {got}");
+                bad++;
+            }
+        }
+
+        foreach (var (button, up, wantFlag, wantData) in new (int Button, bool Up, uint Flag, uint Data)[]
+                 {
+                     (NativeMethods.VK_XBUTTON1, false, NativeMethods.MOUSEEVENTF_XDOWN, NativeMethods.XBUTTON1),
+                     (NativeMethods.VK_XBUTTON1, true, NativeMethods.MOUSEEVENTF_XUP, NativeMethods.XBUTTON1),
+                     (NativeMethods.VK_XBUTTON2, false, NativeMethods.MOUSEEVENTF_XDOWN, NativeMethods.XBUTTON2),
+                     (NativeMethods.VK_XBUTTON2, true, NativeMethods.MOUSEEVENTF_XUP, NativeMethods.XBUTTON2),
+                     (NativeMethods.VK_LBUTTON, false, NativeMethods.MOUSEEVENTF_LEFTDOWN, 0)
+                 })
+        {
+            var (flag, data) = NativeInput.MouseButtonSpec(button, up);
+            if (flag != wantFlag || data != wantData)
+            {
+                Console.WriteLine($"[xb] BAD button={button} up={up} 期望 ({wantFlag},{wantData}) 实际 ({flag},{data})");
+                bad++;
+            }
+        }
+
+        foreach (var (name, vk) in new[]
+                 {
+                     ("L", NativeMethods.VK_LBUTTON), ("R", NativeMethods.VK_RBUTTON),
+                     ("M", NativeMethods.VK_MBUTTON),
+                     ("X1", NativeMethods.VK_XBUTTON1), ("X2", NativeMethods.VK_XBUTTON2)
+                 })
+            if (MainForm.MouseButtonVk(name) != vk)
+            {
+                Console.WriteLine($"[xb] BAD 配置按钮 {name} 应映射到 {vk}");
+                bad++;
+            }
+
+        var defaults = AppConfig.Default();
+        if (defaults.MouseClicks.Count != 5 ||
+            !defaults.MouseClicks.Any(m => m.Button == "X1" && !m.Enabled) ||
+            !defaults.MouseClicks.Any(m => m.Button == "X2" && !m.Enabled))
+        {
+            Console.WriteLine("[xb] BAD 默认配置缺少关闭状态的 X1/X2 行");
+            bad++;
+        }
+
+        Console.WriteLine(bad == 0 ? "[xb] PASS" : $"[xb] FAIL（{bad} 处异常）");
     }
 
     // 调试用：dnf-autofire --savetest <最终间隔秒> [等待毫秒]

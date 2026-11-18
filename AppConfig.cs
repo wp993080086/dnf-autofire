@@ -39,7 +39,7 @@ public class KeyConfig
 /// <summary>鼠标连点配置行。StopMode: infinite=松手停止 / auto=自动点击（StopValue 0 表示无限）。</summary>
 public class MouseClickConfig
 {
-    public string Button { get; set; } = "L"; // L=左键 R=右键 M=滚轮按下（中键）
+    public string Button { get; set; } = "L"; // L=左键 R=右键 M=中键 X1=侧键1 X2=侧键2
     public int IntervalMs { get; set; } = 300;
     public string StopMode { get; set; } = "infinite";
     public int StopValue { get; set; } = 1;
@@ -76,7 +76,9 @@ public class AppConfig
         {
             new MouseClickConfig { Button = "L", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false },
             new MouseClickConfig { Button = "R", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false },
-            new MouseClickConfig { Button = "M", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false }
+            new MouseClickConfig { Button = "M", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false },
+            new MouseClickConfig { Button = "X1", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false },
+            new MouseClickConfig { Button = "X2", IntervalMs = 100, StopMode = "infinite", StopValue = 1, Enabled = false }
         }
     };
 }
@@ -286,7 +288,8 @@ public static class ConfigManager
             }).ToList();
         if (cfg.Keys.Count == 0) cfg.Keys = defaults.Keys; // 空列表回落到默认两行
 
-        // 鼠标固定左/右/滚轮三行：按 Button 对齐，缺的补默认值，多余的按钮丢弃；
+        // 鼠标固定左/右/中/X1/X2 五行：按 Button 对齐，缺的补默认值，多余的按钮丢弃；
+        // 旧配置只有三行时侧键两行自动补默认（关闭状态），不会被清空；
         // v1.1.x 的 count（按住点 N 次）并入 auto
         var byButton = (cfg.MouseClicks ?? new List<MouseClickConfig>())
             .GroupBy(m => (m.Button ?? "").Trim().ToUpperInvariant())

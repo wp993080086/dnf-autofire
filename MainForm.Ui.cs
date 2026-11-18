@@ -402,12 +402,16 @@ public partial class MainForm : Form
         };
     }
 
-    /// <summary>鼠标连点页：固定左/右/滚轮三行 + 停止条件下拉（松手停止 / 自动点击，默认松手停止）。</summary>
+    /// <summary>鼠标连点页：固定左/右/中/X1/X2 五行 + 停止条件下拉（松手停止 / 自动点击，默认松手停止）。</summary>
     private void BuildMousePage(Control page)
     {
         AddPageTitle(page, "鼠标连点", $"间隔范围 {MouseMinMs}-{MouseMaxMs}ms，步进 {MouseStepMs}");
 
-        foreach (var (button, label, y) in new[] { ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120) })
+        foreach (var (button, label, y) in new[]
+                 {
+                     ("L", "左键", 44), ("R", "右键", 82), ("M", "滚轮", 120),
+                     ("X1", "X1", 158), ("X2", "X2", 196)
+                 })
         {
             var row = new MouseRow { Button = button };
             var panel = new AntPanel { Location = new Point(16, y), Size = new Size(RowWidth, RowH), BackColor = Color.White };
@@ -493,25 +497,15 @@ public partial class MainForm : Form
             _mouseRows.Add(row);
         }
 
-        // 三种触发方式各占一行，避免折行后行数随窗口宽度变化
-        const int hintX = 16, hintY = 168, hintLine = 19;
-        string[] hints =
+        // 五行配置占满页面，说明压到最下面一行：简短、不折行，避免挤掉 X1/X2 两行
+        page.Controls.Add(new Label
         {
-            "松手停止：按住对应鼠标键，自动连点，松手即停",
-            "自动点击：无需按下鼠标，设置好次数（0=无限次），自动点击 N 次",
-            "滚轮=滚轮按下（中键）"
-        };
-        for (int i = 0; i < hints.Length; i++)
-        {
-            page.Controls.Add(new Label
-            {
-                Text = hints[i],
-                Location = new Point(hintX, hintY + i * hintLine),
-                AutoSize = true,
-                ForeColor = AntStyle.TextTertiary,
-                Font = AntStyle.GetFont(8f)
-            });
-        }
+            Text = "松手停止：按住键连点，松手即停 ｜ 自动点击：按次数自动，0=无限 ｜ 滚轮=中键，X1/X2=侧键",
+            Location = new Point(16, 234),
+            AutoSize = true,
+            ForeColor = AntStyle.TextTertiary,
+            Font = AntStyle.GetFont(8f)
+        });
     }
 
     /// <summary>页面标题 + 右侧间隔范围说明（按键页与鼠标页共用同一套字号与对齐）。</summary>

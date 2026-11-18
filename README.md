@@ -13,7 +13,7 @@
   - 触发间隔（毫秒，步进 50，范围 50–5000）
   - 停止条件：**松手停止**（默认，按住才连发）/ **自动连按**（开启后无需按住，`0` 表示无限次，可设 0–99999 次，步进 1，数值框后带「次」）
   - 启用开关（Checkbox）：勾选了就必须填键名，空键名或两行同键会拒绝开启并提示
-- **鼠标连点**（v1.1.0 新增，v1.2.0 补充滚轮与自动点击）：左键 / 右键 / 滚轮（滚轮按下，即中键）三行，各自独立配置
+- **鼠标连点**（v1.1.0 新增，v1.2.0 补充滚轮与自动点击，v1.3.0 补充侧键）：左键 / 右键 / 滚轮（滚轮按下，即中键）/ `X1` / `X2`（前进后退侧键）五行，各自独立配置
   - 每键独立设置间隔（毫秒，默认 300，步进 100，范围 100–10000）
   - 停止条件：**松手停止**（默认，按住对应鼠标键才连点，松开即停）/ **自动点击**（开启后无需按住，`0` 表示一直点，可设 1–99999 次，步进 1）
   - 触发时拦截原生点击、由引擎统一注入，避免重复点击（自动点击行不拦截物理点击）
@@ -121,7 +121,9 @@
   "MouseClicks": [
     { "Button": "L", "IntervalMs": 300, "StopMode": "infinite", "StopValue": 1, "Enabled": false },
     { "Button": "R", "IntervalMs": 300, "StopMode": "auto", "StopValue": 50, "Enabled": true },
-    { "Button": "M", "IntervalMs": 100, "StopMode": "infinite", "StopValue": 1, "Enabled": false }
+    { "Button": "M", "IntervalMs": 100, "StopMode": "infinite", "StopValue": 1, "Enabled": false },
+    { "Button": "X1", "IntervalMs": 300, "StopMode": "infinite", "StopValue": 1, "Enabled": false },
+    { "Button": "X2", "IntervalMs": 300, "StopMode": "infinite", "StopValue": 1, "Enabled": false }
   ],
   "StartHotkey": "F6",
   "MouseStartHotkey": "F8",
@@ -136,7 +138,8 @@
 
 - `Keys.Key`：键名，取值见[支持的键位](#支持的键位)（`A`–`Z`、`0`–`9`、`N0`–`N9`、`SPC` 与符号键；小键盘数字与主键盘数字分开算）。手改成不支持的值时，下次启动会被清空，等用户在界面重填
 - `Keys.StopMode`：`hold`=松手停止（默认）/ `auto`=自动连按；`StopValue` 为自动连按的次数（`0` = 无限）
-- `MouseClicks.Button`：`L`=左键 / `R`=右键 / `M`=滚轮（按下）
+- `MouseClicks.Button`：`L`=左键 / `R`=右键 / `M`=滚轮（按下）/ `X1`=侧键1 / `X2`=侧键2。旧配置只有三行时，加载会自动补出关闭状态的 X1/X2 两行
+- 侧键走的是原生 `WM_XBUTTONDOWN/UP`，不做键盘映射。部分鼠标驱动会把侧键改成键盘按键（如 PageUp/PageDown），此时钩子收不到侧键消息，需要在驱动里恢复成默认鼠标键
 - `MouseClicks.StopMode`：`infinite`=松手停止（默认）/ `auto`=自动点击；`StopValue` 为自动点击的次数（`0` = 一直点，旧版 `count` 读入后按自动点击处理）
 - `PlayMode`：`count`=回放 N 次 / `infinite`=一直放 / `duration`=定时 N 分钟；`PlayValue` 为对应的次数或分钟数
 - `PlayGapSec`：两轮回放之间的等待秒数（`0` = 不等待，默认 `1`，上限 999999）

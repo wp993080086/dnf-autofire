@@ -17,10 +17,10 @@ public partial class MainForm : Form
         public AntButton LnkDel = null!;
     }
 
-    /// <summary>鼠标连点配置行（固定左/右/滚轮三行，无增删）。</summary>
+    /// <summary>鼠标连点配置行（固定左/右/中/X1/X2 五行，无增删）。</summary>
     private sealed class MouseRow
     {
-        public string Button = "L"; // L=左键 R=右键 M=滚轮按下（中键）
+        public string Button = "L"; // L=左键 R=右键 M=中键 X1=侧键1 X2=侧键2
         public Panel RowPanel = null!;
         public AntCheckBox Chk = null!;
         public AntNumber NumMs = null!;

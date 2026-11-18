@@ -16,12 +16,12 @@ internal sealed class MouseClickEngine
     /// <summary>触发方式：Infinite=物理按住才连点、松手即停；Auto=开启后自动点击，不需要按住。</summary>
     public enum StopMode { Infinite, Auto }
 
-    /// <summary>一个目标键：鼠标键码（VK_LBUTTON/VK_RBUTTON/VK_MBUTTON）+ 间隔 + 触发方式 + 自动模式次数（0 = 无限）。</summary>
+    /// <summary>一个目标键：鼠标键码（左右中键 + X1/X2 侧键）+ 间隔 + 触发方式 + 自动模式次数（0 = 无限）。</summary>
     public readonly record struct MouseTarget(int Button, int IntervalMs, StopMode Mode, int Count);
 
     private sealed class ClickState
     {
-        public int Button;        // VK 键码：1=左键 2=右键 4=滚轮按下（中键）
+        public int Button;        // VK 键码：1=左键 2=右键 4=中键 5=X1 6=X2
         public int IntervalMs;
         public StopMode Mode;
         public int Remaining;     // 自动点击剩余次数，-1 = 无限
@@ -37,7 +37,7 @@ internal sealed class MouseClickEngine
     private MouseHook? _hook;
     private Thread? _worker;
     private volatile bool _stop;
-    private readonly bool[] _swallowUp = new bool[5]; // 按 VK 键码索引（1/2/4）：按下被拦截时，配对的抬起也要拦截
+    private readonly bool[] _swallowUp = new bool[7]; // 按 VK 键码索引（1/2/4/5/6）：按下被拦截时，配对的抬起也要拦截
     private readonly object _periodSync = new();
     private bool _periodRaised;   // timeBeginPeriod/timeEndPeriod 必须成对：重复 Stop 不能再还给系统一次
 

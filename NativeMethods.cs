@@ -22,6 +22,11 @@ internal static class NativeMethods
     public const int WM_RBUTTONUP = 0x0205;
     public const int WM_MBUTTONDOWN = 0x0207;
     public const int WM_MBUTTONUP = 0x0208;
+    public const int WM_XBUTTONDOWN = 0x020B;
+    public const int WM_XBUTTONUP = 0x020C;
+    // MSLLHOOKSTRUCT.mouseData 高字：侧键序号（1=前进/后退中的 X1，2=X2）
+    public const int XBUTTON1 = 0x0001;
+    public const int XBUTTON2 = 0x0002;
     public const uint LLMHF_INJECTED = 0x01;            // 事件由 SendInput 等注入
     public const uint LLMHF_LOWER_IL_INJECTED = 0x02;   // 低完整性进程注入
     public const uint LLMHF_ANY_INJECTED = LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED;
@@ -35,6 +40,8 @@ internal static class NativeMethods
     public const int VK_LBUTTON = 0x01;
     public const int VK_RBUTTON = 0x02;
     public const int VK_MBUTTON = 0x04;
+    public const int VK_XBUTTON1 = 0x05;
+    public const int VK_XBUTTON2 = 0x06;
 
     // SendInput 鼠标事件标志
     public const uint INPUT_MOUSE = 0;
@@ -44,6 +51,8 @@ internal static class NativeMethods
     public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
     public const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
     public const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+    public const uint MOUSEEVENTF_XDOWN = 0x0080;
+    public const uint MOUSEEVENTF_XUP = 0x0100;
 
     // 录制/回放坐标：虚拟桌面（多屏含负坐标）+ 绝对定位
     public const uint MOUSEEVENTF_MOVE = 0x0001;
@@ -235,23 +244,36 @@ internal static class NativeInput
     }
 
     /// <summary>
-    /// 发送鼠标按下/抬起事件（button 为 VK_LBUTTON / VK_RBUTTON / VK_MBUTTON；up=true 抬起）。
+    /// 纯函数：VK 鼠标键 + 按下/抬起 → SendInput 的 dwFlags 与 mouseData。
+    /// 侧键必须用 XDOWN/XUP，且 mouseData 低位写 XBUTTON1/2 区分两颗键，
+    /// 用普通的 LEFTDOWN 之类是点不到侧键的。抽出来供自检与单测共用。
+    /// </summary>
+    internal static (uint Flag, uint Data) MouseButtonSpec(int button, bool up) => button switch
+    {
+        NativeMethods.VK_XBUTTON1 =>
+            (up ? NativeMethods.MOUSEEVENTF_XUP : NativeMethods.MOUSEEVENTF_XDOWN, NativeMethods.XBUTTON1),
+        NativeMethods.VK_XBUTTON2 =>
+            (up ? NativeMethods.MOUSEEVENTF_XUP : NativeMethods.MOUSEEVENTF_XDOWN, NativeMethods.XBUTTON2),
+        NativeMethods.VK_RBUTTON =>
+            (up ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_RIGHTDOWN, 0),
+        NativeMethods.VK_MBUTTON =>
+            (up ? NativeMethods.MOUSEEVENTF_MIDDLEUP : NativeMethods.MOUSEEVENTF_MIDDLEDOWN, 0),
+        _ => (up ? NativeMethods.MOUSEEVENTF_LEFTUP : NativeMethods.MOUSEEVENTF_LEFTDOWN, 0)
+    };
+
+    /// <summary>
+    /// 发送鼠标按下/抬起事件（button 为 VK_LBUTTON / VK_RBUTTON / VK_MBUTTON / VK_XBUTTON1 / VK_XBUTTON2；up=true 抬起）。
     /// 位置为当前光标处。返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。
     /// </summary>
     public static bool SendMouseButton(int button, bool up)
     {
-        uint flag = button switch
-        {
-            NativeMethods.VK_RBUTTON => up ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_RIGHTDOWN,
-            NativeMethods.VK_MBUTTON => up ? NativeMethods.MOUSEEVENTF_MIDDLEUP : NativeMethods.MOUSEEVENTF_MIDDLEDOWN,
-            _ => up ? NativeMethods.MOUSEEVENTF_LEFTUP : NativeMethods.MOUSEEVENTF_LEFTDOWN
-        };
+        var (flag, data) = MouseButtonSpec(button, up);
         var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_MOUSE };
         input.U.mi = new NativeMethods.MOUSEINPUT
         {
             dx = 0,
             dy = 0,
-            mouseData = 0,
+            mouseData = data,
             dwFlags = flag,
             time = 0,
             dwExtraInfo = IntPtr.Zero

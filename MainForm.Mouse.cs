@@ -79,18 +79,22 @@ public partial class MainForm : Form
         _ => "松手停止"
     };
 
-    /// <summary>配置行按钮标识 → VK 键码（L=左键 R=右键 M=滚轮按下/中键）。</summary>
-    private static int MouseButtonVk(string button) => button switch
+    /// <summary>配置行按钮标识 → VK 键码（L=左键 R=右键 M=中键 X1/X2=侧键）。</summary>
+    internal static int MouseButtonVk(string button) => button switch
     {
         "R" => NativeMethods.VK_RBUTTON,
         "M" => NativeMethods.VK_MBUTTON,
+        "X1" => NativeMethods.VK_XBUTTON1,
+        "X2" => NativeMethods.VK_XBUTTON2,
         _ => NativeMethods.VK_LBUTTON
     };
 
-    private static string MouseButtonName(int vk) => vk switch
+    internal static string MouseButtonName(int vk) => vk switch
     {
         NativeMethods.VK_RBUTTON => "右键",
         NativeMethods.VK_MBUTTON => "滚轮",
+        NativeMethods.VK_XBUTTON1 => "侧键 X1",
+        NativeMethods.VK_XBUTTON2 => "侧键 X2",
         _ => "左键"
     };
 

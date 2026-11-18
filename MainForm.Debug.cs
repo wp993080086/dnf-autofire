@@ -221,11 +221,13 @@ public partial class MainForm : Form
         return $"OK targets={targets.Count} vks=[{string.Join(", ", targets.Select(t => "0x" + t.Vk.ToString("X2")))}]";
     }
 
-    /// <summary>调试入口：--fadetest 切页并走白幕淡入，供抓帧验证。</summary>
+    /// <summary>调试入口：--fadetest 切页并走交叉淡化，供抓帧验证。</summary>
     internal void DebugShowTabFade(int index)
     {
+        StopFade();
+        var oldShot = CapturePage(_pages[_tabIndex]);
         DebugShowTab(index);
-        BeginPageFade();
+        BeginPageFade(oldShot);
     }
 
     /// <summary>调试入口：当前页在屏幕上的矩形（抓帧用，跟随页面尺寸变化）。</summary>

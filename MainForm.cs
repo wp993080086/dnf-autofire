@@ -65,12 +65,12 @@ public partial class MainForm : Form
     private readonly int[] _tabTextWidths = new int[TabTitles.Length]; // 纯文字宽度，下划线据此对称收短
     private int _underlineWidth;  // 所有页签共用的下划线宽度（取最短文字宽），保证长度一致
 
-    // 页面切换白幕淡入（WinForms 子控件不支持逐像素 alpha，用分层窗口铺一层白幕实现）
+    // 页面切换交叉淡化：切页前截下旧页，切页后用旧页截图盖住新页再淡出到 0。
+    // 子控件不支持逐像素 alpha，只有顶层分层窗口能整体改 Opacity。
     private FadeVeil? _veil;
     private readonly System.Windows.Forms.Timer _fadeTimer;
     private int _fadeElapsed;
-    private const float VeilStartOpacity = 0.55f;
-    private const int FadeMs = 300;
+    private const int FadeMs = 280;
     private readonly Font _tabFont; // Tab 文字：加大加粗，突出页签
     private readonly Font _fontBold;
 

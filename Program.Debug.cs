@@ -1,4 +1,5 @@
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace DnfAutoFire;
 
@@ -8,6 +9,11 @@ namespace DnfAutoFire;
 // Release 构建里整段（含全部开关字符串）不进入程序集。
 internal static partial class Program
 {
+    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
+    [DllImport("gdi32.dll")] private static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h,
+        IntPtr src, int sx, int sy, int rop);
+
     /// <summary>命中调试命令行则执行并返回 true，调用方直接结束进程；没命中返回 false，继续走正式流程。</summary>
     internal static bool TryRunDebugCommand(string[] args)
     {
@@ -396,14 +402,14 @@ internal static partial class Program
         Application.Run(form);
     }
 
-    // 调试用：dnf-autofire --fadetest <prefix> 切页并按 40ms 连续抓帧，验证白幕淡入
+    // 调试用：dnf-autofire --fadetest <prefix> 切页并按 40ms 连续抓帧，验证交叉淡化
     private static void RunFadeTest(string[] args)
     {
-        var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220) };
+        var form = new MainForm { StartPosition = FormStartPosition.Manual, Location = new Point(220, 220), TopMost = true };
         form.Show();
-        var rect = form.DebugPageScreenRect();
         // 等窗口出现动画/首帧绘制结束，再切页抓帧，否则抓到的是窗口出现动画
         var warm = new System.Windows.Forms.Timer { Interval = 500 };
+        Rectangle rect = default;
         int i = 0;
         var t = new System.Windows.Forms.Timer { Interval = 40 };
         warm.Tick += (_, _) =>
@@ -411,6 +417,7 @@ internal static partial class Program
             warm.Stop();
             warm.Dispose();
             form.Activate();
+            rect = form.DebugPageScreenRect(); // 布局稳定后再取，否则位置会偏
             form.DebugShowTabFade(1);
             t.Start();
         };
@@ -418,7 +425,15 @@ internal static partial class Program
         {
             using var bmp = new Bitmap(rect.Width, rect.Height);
             using (var g = Graphics.FromImage(bmp))
-                g.CopyFromScreen(rect.Location, Point.Empty, rect.Size);
+            {
+                // CopyFromScreen 的 BitBlt 不含 CAPTUREBLT，抓不到分层窗口（蒙层正是分层窗口）
+                IntPtr dst = g.GetHdc();
+                IntPtr src = GetDC(IntPtr.Zero);
+                BitBlt(dst, 0, 0, rect.Width, rect.Height, src, rect.X, rect.Y,
+                    0x00CC0020 /*SRCCOPY*/ | 0x40000000 /*CAPTUREBLT*/);
+                ReleaseDC(IntPtr.Zero, src);
+                g.ReleaseHdc(dst);
+            }
             bmp.Save($"{args[2]}_{i}.png", ImageFormat.Png);
             i++;
             if (i < 10) return;

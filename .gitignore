@@ -13,3 +13,6 @@ del_nul.py
 
 # agent
 .workbuddy/
+
+# 抓帧/截图临时产物
+.cache/

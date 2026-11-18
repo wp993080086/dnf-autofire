@@ -75,16 +75,14 @@ internal static partial class Program
         }
         Console.WriteLine($"[name] 共 {total} 个键名 / {seen.Count} 个不同 VK，异常 {bad} 个");
 
-        // 扩展键必须带 E0 前缀，普通键不能带（多带了会被当成扩展键，如小键盘 Enter）
-        foreach (string name in new[] { "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN" })
-            if (!KeyNames.IsExtended(KeyNames.ToVk(name))) { Console.WriteLine($"[name] BAD {name} 未标记为扩展键"); bad++; }
-        foreach (string name in new[] { "A", "0", "N5", "SPC", "F5", "TAB", "ENT", "ESC", "BS", ";" })
-            if (KeyNames.IsExtended(KeyNames.ToVk(name))) { Console.WriteLine($"[name] BAD {name} 被误标为扩展键"); bad++; }
+        // 当前支持集里不该出现扩展键：方向键与编辑键都撤掉了，IsExtended 只是注入层的防御分支
+        foreach (string name in KeyNames.All())
+            if (KeyNames.IsExtended(KeyNames.ToVk(name))) { Console.WriteLine($"[name] BAD {name} 不该是扩展键"); bad++; }
 
-        // 非法与非目标键：必须拒绝
-        foreach (string text in new[] { "", "  ", "X5", "AB", "F13", "NUMPAD5", "SHIFT", "CTRL", "DEL", "INS" })
+        // 非法与已撤掉的键：必须拒绝
+        foreach (string text in new[] { "", "  ", "X5", "AB", "F5", "F13", "LEFT", "TAB", "BS", "PGUP", "NUMPAD5", "SHIFT", "DEL", "INS" })
             if (KeyNames.ToVk(text) >= 0) { Console.WriteLine($"[name] BAD 「{text}」应判为非法"); bad++; }
-        foreach (Keys key in new[] { Keys.Insert, Keys.LShiftKey, Keys.Divide, Keys.CapsLock, Keys.Multiply })
+        foreach (Keys key in new[] { Keys.F5, Keys.Up, Keys.Tab, Keys.Home, Keys.Back, Keys.Insert, Keys.LShiftKey, Keys.Divide, Keys.CapsLock })
             if (KeyNames.FromKeys(key) != null) { Console.WriteLine($"[name] BAD {key} 应判为不支持"); bad++; }
 
         Console.WriteLine(bad == 0 ? "[name] PASS" : $"[name] FAIL（{bad} 处异常）");

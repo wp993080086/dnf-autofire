@@ -474,14 +474,10 @@ public partial class MainForm : Form
         {
             var txt = _rows[0].TxtKey.Inner;
 
-            // 应当整体写入的长键名 / 小键盘 / 符号键
+            // 应当整体写入的键：空格、小键盘数字、符号键
             var direct = new (Keys Key, string Expect)[]
             {
-                (Keys.F1, "F1"), (Keys.F5, "F5"), (Keys.F12, "F12"),
-                (Keys.Space, "SPC"), (Keys.Tab, "TAB"), (Keys.Enter, "ENT"), (Keys.Escape, "ESC"),
-                (Keys.Back, "BS"), (Keys.Home, "HOME"), (Keys.End, "END"),
-                (Keys.PageUp, "PGUP"), (Keys.PageDown, "PGDN"),
-                (Keys.Left, "LEFT"), (Keys.Up, "UP"), (Keys.Right, "RIGHT"), (Keys.Down, "DOWN"),
+                (Keys.Space, "SPC"),
                 (Keys.NumPad0, "N0"), (Keys.NumPad5, "N5"), (Keys.NumPad9, "N9"),
                 (Keys.Oem1, ";"), (Keys.Oemplus, "="), (Keys.Oemcomma, ","), (Keys.OemMinus, "-"),
                 (Keys.OemPeriod, "."), (Keys.OemQuestion, "/"), (Keys.Oemtilde, "`"),
@@ -506,22 +502,20 @@ public partial class MainForm : Form
                 if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 不该在 KeyDown 里处理"); }
             }
 
-            // 不支持的键：必须吞掉且不写入
-            foreach (Keys key in new[] { Keys.Insert, Keys.Divide, Keys.Multiply, Keys.CapsLock })
+            // 已撤掉的键（F 键 / 方向键 / 编辑键）与不支持的键：不写入、也不拦截，交给文本框默认行为
+            var ignored = new[]
+            {
+                Keys.F1, Keys.F5, Keys.F12, Keys.Up, Keys.Down, Keys.Left, Keys.Right,
+                Keys.Tab, Keys.Enter, Keys.Escape, Keys.Home, Keys.End, Keys.PageUp, Keys.PageDown,
+                Keys.Insert, Keys.Divide, Keys.Multiply, Keys.CapsLock, Keys.LShiftKey, Keys.ControlKey, Keys.Menu,
+                Keys.Back, // 退格必须保留删除语义
+            };
+            foreach (Keys key in ignored)
             {
                 txt.Clear();
                 var ev = new KeyEventArgs(key);
                 KeyBox_KeyDown(txt, ev);
-                if (!ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 应被拒绝，实际「{txt.Text}」"); }
-            }
-
-            // 修饰键：不写入，但也不拦截（要留给 Ctrl+V 这类系统组合）
-            foreach (Keys key in new[] { Keys.LShiftKey, Keys.ControlKey, Keys.Menu })
-            {
-                txt.Clear();
-                var ev = new KeyEventArgs(key);
-                KeyBox_KeyDown(txt, ev);
-                if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 不该拦截，实际「{txt.Text}」"); }
+                if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[cap] BAD {key} 不该被拦截，实际「{txt.Text}」"); }
             }
 
             // Delete 仍是清空

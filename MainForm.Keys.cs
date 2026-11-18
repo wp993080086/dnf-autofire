@@ -140,10 +140,9 @@ public partial class MainForm : Form
             Location = new Point(58, 3),
             Size = new Size(56, 28)
         };
-        row.TxtKey.Inner.MaxLength = KeyNames.MaxLength; // 最长 RIGHT/PGUP 这一档
+        row.TxtKey.Inner.MaxLength = KeyNames.MaxLength; // 最长 SPC 三个字符
         row.TxtKey.Inner.CharacterCasing = CharacterCasing.Upper;
         row.TxtKey.Inner.TextAlign = HorizontalAlignment.Center;
-        row.TxtKey.Inner.AcceptsTab = true;  // 让 Tab 进 KeyDown 被捕获，而不是切走焦点
         row.TxtKey.Text = key;
 
         // 控件按实测文字宽度顺排，间距统一 8px（Label.AutoSize 挂到父控件后 Right 才有值）。
@@ -363,8 +362,9 @@ public partial class MainForm : Form
 
     /// <summary>
     /// 键名捕获：直接按目标键写入规范键名。
-    /// 单字符 A-Z、0-9 交给 KeyPress 走文本输入；功能键、方向键、空格、编辑键、符号键在这里
-    /// 按 VK 反查写入（符号键因此不受键盘布局下实际字符的影响）。不支持的键一律吞掉并提示。
+    /// 单字符 A-Z、0-9 交给 KeyPress 走文本输入；空格与小键盘数字在这里按 VK 反查写入，
+    /// 符号键同理（按 VK 记录，不受键盘布局下实际字符的影响）。其余键一律不干预，
+    /// 退格、方向键、Tab 等保持文本框原本的行为。
     /// </summary>
     private void KeyBox_KeyDown(object? sender, KeyEventArgs e)
     {
@@ -374,6 +374,8 @@ public partial class MainForm : Form
         if (e.Control || e.Alt) return;
         // 单独按修饰键既不是目标键，也不该拦掉系统行为（Shift 打大写、系统快捷键）
         if (KeyNames.IsModifier(e.KeyCode)) return;
+        // 退格保持「删除一个字符」的原义，不当作 BS 键写入
+        if (e.KeyCode == Keys.Back) return;
 
         if (e.KeyCode == Keys.Delete)
         {
@@ -384,14 +386,7 @@ public partial class MainForm : Form
         }
 
         string? name = KeyNames.FromKeys(e.KeyCode);
-        if (name == null)
-        {
-            // 小键盘 / * - + . 、Insert、CapsLock 等：吞掉，避免打出字符或触发控件默认行为
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-            UpdateStatus("这个键不支持连发，可用 A-Z、0-9、F1-F12、空格、方向键与符号键");
-            return;
-        }
+        if (name == null) return; // 不支持或导航键：交给文本框默认行为，不吞不提示
 
         if (name.Length == 1 && char.IsLetterOrDigit(name[0])) return; // A-Z / 0-9 交给 KeyPress
 

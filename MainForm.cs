@@ -196,6 +196,10 @@ public partial class MainForm : Form
             catch (Exception ex) { Logger.Error("MouseAllDone", ex); }
         };
 
+        // 注入被系统拦截：窗口此时已收进托盘，气泡是用户唯一能看到的提示，必须弹一次
+        _engine.Blocked += () => NotifyInjectBlocked("连发");
+        _mouseEngine.Blocked += () => NotifyInjectBlocked("连点");
+
         Shown += (_, _) =>
         {
             RegisterHotkeys();
@@ -255,12 +259,40 @@ public partial class MainForm : Form
         }
     }
 
-    /// <summary>状态栏：两个引擎各自的运行状态，独立开关一目了然。</summary>
+    /// <summary>状态栏：两个引擎各自的运行状态，独立开关一目了然；被系统拦截时优先告警。</summary>
     private void RefreshStatus()
     {
+        if (_engine.InjectBlocked || _mouseEngine.InjectBlocked)
+        {
+            string which = _engine.InjectBlocked && _mouseEngine.InjectBlocked ? "连发/连点"
+                : _engine.InjectBlocked ? "连发" : "连点";
+            lblStatus.ForeColor = AntStyle.Danger;
+            UpdateStatus($"警告：{which}注入被系统拦截，请以管理员运行");
+            return;
+        }
+        lblStatus.ForeColor = AntStyle.TextTertiary;
         string keys = _engine.Running ? $"按键连发 运行中（{(_engine.Mode == "A" ? "保留原生" : "拦截原生")}）" : "按键连发 未开启";
         string mouse = _mouseEngine.Running ? "鼠标连点 运行中" : "鼠标连点 未开启";
         UpdateStatus($"{keys} · {mouse}");
+    }
+
+    /// <summary>注入被拦截的工作线程回调：切回 UI 弹一次托盘气泡并刷新状态栏/托盘文字。</summary>
+    private void NotifyInjectBlocked(string what)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed) return;
+                RefreshStatus();
+                UpdateTrayText();
+                trayIcon.ShowBalloonTip(3600, $"DNF 连发 · {what}被系统拦截",
+                    "按键/点击没有真正发出去。请以管理员身份运行本程序；若游戏以更高权限启动则无法注入。",
+                    ToolTipIcon.Warning);
+            }));
+        }
+        catch (Exception ex) { Logger.Error("InjectBlocked", ex); }
     }
 
     private void ShowWindow()

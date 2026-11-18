@@ -47,7 +47,7 @@ internal sealed class AutoFireEngine
     internal static readonly bool DryRun = false;
 #endif
 
-    private static void Send(int vk, bool up)
+    private void Send(int vk, bool up)
     {
         if (DryRun)
         {
@@ -56,10 +56,18 @@ internal sealed class AutoFireEngine
 #endif
             return;
         }
-        NativeInput.SendKey(vk, up);
+        if (!NativeInput.SendKey(vk, up)) MarkBlocked();
     }
 
     public bool Running { get; private set; }
+
+    private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
+
+    /// <summary>注入被系统拦截（常见于未以管理员运行、或目标窗口权限更高）。</summary>
+    public bool InjectBlocked => _blocked;
+
+    /// <summary>注入首次被拦截时触发一次（工作线程上回调，UI 需自行调度）。</summary>
+    public event Action? Blocked;
 
     /// <summary>所有目标键都是「自动连按」且次数已跑完时触发（工作线程上回调，UI 需自行调度）。</summary>
     public event Action? AllDone;
@@ -76,6 +84,7 @@ internal sealed class AutoFireEngine
     public void Start(List<KeyTarget> targets)
     {
         Stop();
+        _blocked = false; // 新一轮重新判定，避免上次的拦截状态带到下次开启
         foreach (var t in targets)
         {
             if (_keys.Any(k => k.Vk == t.Vk)) continue;
@@ -238,6 +247,16 @@ internal sealed class AutoFireEngine
             if (on) timeBeginPeriod(1); else timeEndPeriod(1);
             _periodRaised = on;
         }
+    }
+
+    /// <summary>只在第一次失败时记日志并通知 UI，避免一分钟写几万行/弹几万个气泡。</summary>
+    private void MarkBlocked()
+    {
+        if (_blocked) return;
+        _blocked = true;
+        Logger.Error("AutoFireEngine", new InvalidOperationException(
+            "连发注入被系统拦截（SendInput 返回 0）。请以管理员身份运行；若游戏以更高权限启动，注入无法生效。"));
+        try { Blocked?.Invoke(); } catch (Exception ex) { Logger.Error("Blocked", ex); }
     }
 
     private void OnKeyDown(int vk)

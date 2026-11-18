@@ -220,8 +220,8 @@ internal static class NativeMethods
 /// <summary>通过 SendInput 发送键盘事件（使用扫描码，兼容性最好）。</summary>
 internal static class NativeInput
 {
-    /// <summary>发送单个按下或抬起事件（up=true 抬起）。</summary>
-    public static void SendKey(int vk, bool up)
+    /// <summary>发送单个按下或抬起事件（up=true 抬起）。返回是否注入成功（被 UIPI 拦截时 SendInput 返回 0）。</summary>
+    public static bool SendKey(int vk, bool up)
     {
         ushort scan = (ushort)NativeMethods.MapVirtualKey((uint)vk, NativeMethods.MAPVK_VK_TO_VSC);
 
@@ -240,7 +240,7 @@ internal static class NativeInput
             time = 0,
             dwExtraInfo = IntPtr.Zero
         };
-        NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>());
+        return NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf<NativeMethods.INPUT>()) == 1;
     }
 
     /// <summary>

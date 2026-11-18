@@ -43,6 +43,14 @@ internal sealed class MouseClickEngine
 
     public bool Running { get; private set; }
 
+    private volatile bool _blocked; // SendInput 被系统/UIPI 拦截（返回 0）
+
+    /// <summary>注入被系统拦截（常见于未以管理员运行、或目标窗口权限更高）。</summary>
+    public bool InjectBlocked => _blocked;
+
+    /// <summary>注入首次被拦截时触发一次（工作线程上回调，UI 需自行调度）。</summary>
+    public event Action? Blocked;
+
     /// <summary>所有目标行都是「自动点击」且次数已跑完时触发（工作线程上回调，UI 需自行调度）。</summary>
     public event Action? AllDone;
 
@@ -54,7 +62,7 @@ internal sealed class MouseClickEngine
     internal static readonly bool DryRun = false;
 #endif
 
-    private static void Send(int button, bool up)
+    private void Send(int button, bool up)
     {
         if (DryRun)
         {
@@ -63,7 +71,7 @@ internal sealed class MouseClickEngine
 #endif
             return;
         }
-        NativeInput.SendMouseButton(button, up);
+        if (!NativeInput.SendMouseButton(button, up)) MarkBlocked();
     }
 
     [DllImport("winmm.dll")]
@@ -75,6 +83,7 @@ internal sealed class MouseClickEngine
     public void Start(List<MouseTarget> targets)
     {
         Stop();
+        _blocked = false; // 新一轮重新判定，避免上次的拦截状态带到下次开启
         foreach (var t in targets)
         {
             if (_tasks.Any(k => k.Button == t.Button)) continue;
@@ -238,6 +247,16 @@ internal sealed class MouseClickEngine
             if (on) timeBeginPeriod(1); else timeEndPeriod(1);
             _periodRaised = on;
         }
+    }
+
+    /// <summary>只在第一次失败时记日志并通知 UI，避免一分钟写几万行/弹几万个气泡。</summary>
+    private void MarkBlocked()
+    {
+        if (_blocked) return;
+        _blocked = true;
+        Logger.Error("MouseClickEngine", new InvalidOperationException(
+            "鼠标连点注入被系统拦截（SendInput 返回 0）。请以管理员身份运行；若游戏以更高权限启动，注入无法生效。"));
+        try { Blocked?.Invoke(); } catch (Exception ex) { Logger.Error("Blocked", ex); }
     }
 
     private void OnButtonDown(int button)

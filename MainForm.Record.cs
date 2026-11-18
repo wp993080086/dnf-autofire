@@ -490,6 +490,7 @@ public partial class MainForm : Form
         string text =
             _recorder != null ? "DNF 连发 · 录制中"
             : _player != null ? progress ?? "DNF 连发 · 回放中"
+            : _engine.InjectBlocked || _mouseEngine.InjectBlocked ? "DNF 连发 · 注入被拦截，请管理员运行"
             : _engine.Running || _mouseEngine.Running ? "DNF 连发 · 运行中"
             : "DNF 连发";
         if (text.Length > 60) text = text[..60];

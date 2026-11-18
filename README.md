@@ -115,7 +115,7 @@
 
 ```json
 {
-  "ConfigVersion": "1.2.0",
+  "ConfigVersion": "1.3.0",
   "Keys": [
     { "Key": "X", "IntervalMs": 50, "StopMode": "hold", "StopValue": 0, "Enabled": true },
     { "Key": "A", "IntervalMs": 100, "StopMode": "auto", "StopValue": 200, "Enabled": false }
@@ -180,7 +180,7 @@ dotnet publish -c Release -r win-x64 ^
 
 ## 单元测试
 
-`tests/DnfAutoFire.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、轨迹坐标归一化、回放进度文本等纯逻辑（74 项）：
+`tests/DnfAutoFire.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、录制方案脏数据钳制、轨迹坐标归一化、回放进度文本等纯逻辑（79 项）：
 
 ```bash
 dotnet test tests/DnfAutoFire.Tests/DnfAutoFire.Tests.csproj
@@ -211,7 +211,6 @@ CI 在发布前会先以 Release 配置跑一遍测试，测试不通过就不�
 | `--keynametest` | 校验键名 ↔ VK 映射的往返一致性、唯一性与非法值拒绝 |
 | `--keycaptest` | 喂物理按键给键名框，验证捕获与不拦截规则 |
 | `--xbuttontest` | 校验 X1/X2 侧键的消息解析、注入标志、配置映射与默认行 |
-| `--fadetest <png>` | 离屏渲染切页白幕并保存 PNG |
 | `--focustest` | 打印各控件的当前焦点与光标状态 |
 | `--traytest` | 打印托盘菜单项，确认「打开日志」等出口都在 |
 | `--tabstyletest` | 读 Tab 头实际样式位，确认 hover 双缓冲已开启（不闪） |

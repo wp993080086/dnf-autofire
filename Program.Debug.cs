@@ -38,7 +38,26 @@ internal static partial class Program
         if (args.Length >= 2 && args[1] == "--logpathtest") { RunLogPathTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--traytest") { RunTrayTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--tabstyletest") { RunTabStyleTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--blockedtest") { RunBlockedTest(args); return true; }
         return false;
+    }
+
+    // 调试用：dnf-autofire --blockedtest 模拟注入被拦截，验证告警链路
+    private static void RunBlockedTest(string[] args)
+    {
+        using var form = new MainForm();
+        form.Show();
+        var t = new System.Windows.Forms.Timer { Interval = 400 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            t.Dispose();
+            form.DebugTestBlocked();
+            form.Close();
+            Application.Exit();
+        };
+        t.Start();
+        Application.Run();
     }
 
     // 调试用：dnf-autofire --keycaptest 喂物理按键给键名框，验证捕获到的键名

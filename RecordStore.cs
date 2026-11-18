@@ -79,26 +79,36 @@ internal static class RecordStore
         {
             if (!File.Exists(FilePath)) return new List<RecordProfile>();
             var file = JsonSerializer.Deserialize<RecordFile>(File.ReadAllText(FilePath), JsonOptions);
-            var list = file?.Profiles ?? new List<RecordProfile>();
-            // 脏数据兜底：缺 id 的补一个，点位列表不能为 null
-            foreach (var p in list)
-            {
-                if (string.IsNullOrEmpty(p.Id)) p.Id = NewId();
-                p.Points ??= new List<RecordPoint>();
-            }
-            // 手改文件塞超量方案时按上限截断（只影响内存，不主动改写文件）
-            if (list.Count > MaxProfiles)
-            {
-                Logger.Info($"recordings.json 方案数 {list.Count} 超过上限，仅加载前 {MaxProfiles} 个");
-                list.RemoveRange(MaxProfiles, list.Count - MaxProfiles);
-            }
-            return list;
+            return SanitizeProfiles(file?.Profiles);
         }
         catch (Exception ex)
         {
             Logger.Error("RecordStore.Load", ex);
             return new List<RecordProfile>();
         }
+    }
+
+    /// <summary>
+    /// 纯函数：脏数据钳制，供 Load 与单测共用，不碰磁盘。
+    /// JSON 里显式写 null 会绕过属性的初始化器（= new()），所以 Screen/Points 都要在这里兜底；
+    /// 回放路径直接读 Screen.W，漏掉就会 NullReferenceException。
+    /// </summary>
+    internal static List<RecordProfile> SanitizeProfiles(List<RecordProfile>? source)
+    {
+        var list = (source ?? new List<RecordProfile>()).Where(p => p != null).ToList();
+        foreach (var p in list)
+        {
+            if (string.IsNullOrEmpty(p.Id)) p.Id = NewId();
+            p.Points ??= new List<RecordPoint>();
+            p.Screen ??= new RecordScreen();
+        }
+        // 手改文件塞超量方案时按上限截断（只影响内存，不主动改写文件）
+        if (list.Count > MaxProfiles)
+        {
+            Logger.Info($"recordings.json 方案数 {list.Count} 超过上限，仅加载前 {MaxProfiles} 个");
+            list.RemoveRange(MaxProfiles, list.Count - MaxProfiles);
+        }
+        return list;
     }
 
     /// <summary>写盘失败会抛出，由调用方 catch 后提示（内存中的方案不丢）。</summary>

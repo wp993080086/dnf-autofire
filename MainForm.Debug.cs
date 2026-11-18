@@ -527,6 +527,27 @@ public partial class MainForm : Form
             Console.WriteLine($"[tray] {item.Text}");
     }
 
+    /// <summary>调试入口：模拟注入被拦截，验证事件幂等与状态栏/托盘告警文案。</summary>
+    internal void DebugTestBlocked()
+    {
+        const System.Reflection.BindingFlags bind =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var f = typeof(AutoFireEngine).GetField("_blocked", bind)!;
+        var mark = typeof(AutoFireEngine).GetMethod("MarkBlocked", bind)!;
+        int fired = 0;
+        void Count() => fired++;
+        _engine.Blocked += Count;
+        mark.Invoke(_engine, null);   // 触发一次：置位 + 发事件 + 走通知链路
+        mark.Invoke(_engine, null);   // 第二次应被 _blocked 挡住，不重复弹气泡
+        Console.WriteLine($"[blocked] 事件触发={fired}次（应1） 状态={f.GetValue(_engine)}（应True）");
+        Application.DoEvents();       // 泵 BeginInvoke，让状态栏/托盘/气泡回调真正执行
+        Application.DoEvents();
+        Console.WriteLine($"[blocked] 状态栏={lblStatus.Text} 前景={lblStatus.ForeColor}");
+        Console.WriteLine($"[blocked] 托盘={trayIcon.Text}");
+        f.SetValue(_engine, false);   // 复位，避免影响后续
+        _engine.Blocked -= Count;
+    }
+
     /// <summary>调试入口：读 Tab 头实际样式位，确认双缓冲已生效（hover 不闪）。</summary>
     internal void DebugDumpTabStyle()
     {

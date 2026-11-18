@@ -87,7 +87,7 @@ public static class ConfigManager
 {
     private static string ConfigPath => Path.Combine(AppPaths.DataDir, "config.json");
 
-    /// <summary>程序版本（形如 1.2.0），取自程序集版本，与 Tab 栏显示的版本号同源。</summary>
+    /// <summary>程序版本（形如 x.y.z），取自程序集版本，与 Tab 栏显示的版本号同源。</summary>
     public static string AppVersion =>
         typeof(AppConfig).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 

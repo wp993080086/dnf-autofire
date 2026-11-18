@@ -118,7 +118,7 @@ internal sealed class PlayOverlayForm : Form
         if (keepRight) Left = right - w;
     }
 
-    private string LoopText() => _total > 0 ? $"第 {_loop}/{_total} 次" : $"第 {_loop} 次";
+    private string LoopText() => PlayText.Loop(_loop, _total);
 
     private string ElapsedText() => FormatElapsed(_elapsedMs);
 

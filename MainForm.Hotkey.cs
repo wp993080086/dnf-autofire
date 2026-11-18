@@ -188,14 +188,7 @@ public partial class MainForm : Form
         return sel;
     }
 
-    private static int HotkeyStringToVk(string s)
-    {
-        s = s.Trim().ToUpper();
-        if (s.Length >= 2 && s[0] == 'F' && int.TryParse(s[1..], out int n) && n is >= 1 and <= 12)
-            return 0x70 + n - 1; // F1=0x70
-        if (s.Length == 1 && char.IsLetterOrDigit(s[0])) return s[0];
-        return 0x75; // 兜底 F6
-    }
+    private static int HotkeyStringToVk(string s) => HotkeyFallback.ToVk(s);
 
     /// <summary>四个热键槽位：界面标签名 + 当前生效值（界面上按 Tab 只显示其中一到两个）。</summary>
     private (string Name, string Key)[] HotkeySlots() => new[]

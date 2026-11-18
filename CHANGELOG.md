@@ -23,6 +23,7 @@
 
 ### 变更
 
+- 抽出 `HotkeyFallback.ToVk`、`ConfigManager.ParseAndSanitize`、`NativeInput.NormalizePointer`、`PlayText` 等纯函数，新增 xUnit 测试项目（74 项），CI 在 publish 前先跑 Release 测试
 - 键名 ↔ 虚拟键码的映射集中到 `KeyNames.cs`，界面校验、配置读取、注入路径共用一张表，避免三处各写一份
 - 明确不支持 `F1`–`F12`、方向键、`TAB`/`ENT`/`ESC`/`HOME`/`END`/`PGUP`/`PGDN`、修饰键与小键盘符号键。F 键留给热键（否则目标键会被系统当热键截走，连发收不到按下），方向键与编辑键在游戏里没有连发价值，还会吃掉文本框的光标移动与 Tab 切焦点
 - 注入层按 VK 补齐扩展键的 `E0` 前缀。当前支持集已无扩展键，属预防性修正：少了它方向键会被目标程序识别成小键盘上的同名键（上箭头 0x26 注入成 0x68 小键盘 8）

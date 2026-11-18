@@ -509,8 +509,7 @@ public partial class MainForm : Form
     private RecordProfile? SelectedProfile() =>
         _profiles.FirstOrDefault(p => p.Id == _selectedProfileId);
 
-    private static string FormatDuration(long ms) =>
-        $"{ms / 60000:00}:{ms % 60000 / 1000:00}";
+    private static string FormatDuration(long ms) => PlayText.Duration(ms);
 
     private string PlayModeKey() => cboPlayMode.SelectedIndex switch
     {

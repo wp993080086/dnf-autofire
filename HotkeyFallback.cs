@@ -18,6 +18,17 @@ internal static class HotkeyFallback
             if (!used.Contains(candidate)) return candidate;
         return null;
     }
+
+    /// <summary>热键文本 → VK。F1=0x70；单字符沿用旧行为；无法识别回落到 F6。</summary>
+    public static int ToVk(string? s)
+    {
+        string text = (s ?? "").Trim().ToUpperInvariant();
+        if (text.Length >= 2 && text[0] == 'F'
+            && int.TryParse(text[1..], out int n) && n is >= 1 and <= 12)
+            return 0x70 + n - 1;
+        if (text.Length == 1 && char.IsLetterOrDigit(text[0])) return text[0];
+        return 0x75; // 兜底 F6
+    }
 }
 
 /// <summary>单实例互相唤起用的 Win32 消息。</summary>

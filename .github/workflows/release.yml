@@ -21,6 +21,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Run unit tests
+        run: dotnet test tests/DnfAutoFire.Tests/DnfAutoFire.Tests.csproj -c Release
+
       - name: Publish single-file exe
         run: dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 

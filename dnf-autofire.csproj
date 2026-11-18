@@ -15,4 +15,14 @@
     <Version>1.2.0</Version>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 纯逻辑单测要访问 internal 的键名映射、配置合并与纯函数 -->
+    <InternalsVisibleTo Include="DnfAutoFire.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 根目录项目默认递归收 .cs，测试项目自己那份不能被编进 exe -->
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>

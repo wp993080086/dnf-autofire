@@ -112,17 +112,7 @@ public static class ConfigManager
                 return fallback;
             }
 
-            MigrateLegacy(file);
-
-            // 以默认配置为骨架逐字段合并：形状对得上的保留用户值，缺失或类型不符的用默认值；
-            // 默认配置里没有的键（已废弃字段）不复制，回写时自然消失
-            var stats = new MergeStats();
-            var shape = JsonSerializer.SerializeToNode(AppConfig.Default(), JsonOptions)!.AsObject();
-            var cfg = MergeObject(shape, file, stats).Deserialize<AppConfig>(JsonOptions) ?? AppConfig.Default();
-
-            Sanitize(cfg); // 类型对不代表取值合规：越界/非法的值统一钳到界面允许范围
-
-            string? oldVersion = cfg.ConfigVersion;
+            var cfg = ParseAndSanitize(text, out var stats, out string? oldVersion);
 
             // 统一回写：版本号更新为当前程序，废弃字段当场清掉。
             // 写盘失败（只读目录等）只记日志，绝不能因为回写失败把已经合并好的配置丢掉
@@ -145,6 +135,27 @@ public static class ConfigManager
         return AppConfig.Default();
     }
 
+    /// <summary>
+    /// 纯文本 → 合并、迁移、钳制后的配置。不碰磁盘，供 Load 与单测共用。
+    /// </summary>
+    internal static AppConfig ParseAndSanitize(string text, out MergeStats stats, out string? oldVersion)
+    {
+        stats = new MergeStats();
+        oldVersion = null;
+        if (JsonNode.Parse(text) is not JsonObject file) return AppConfig.Default();
+
+        MigrateLegacy(file);
+
+        // 以默认配置为骨架逐字段合并：形状对得上的保留用户值，缺失或类型不符的用默认值；
+        // 默认配置里没有的键（已废弃字段）不复制，回写时自然消失
+        var shape = JsonSerializer.SerializeToNode(AppConfig.Default(), JsonOptions)!.AsObject();
+        var cfg = MergeObject(shape, file, stats).Deserialize<AppConfig>(JsonOptions) ?? AppConfig.Default();
+
+        Sanitize(cfg); // 类型对不代表取值合规：越界/非法的值统一钳到界面允许范围
+        oldVersion = cfg.ConfigVersion;
+        return cfg;
+    }
+
     /// <summary>加载期间的回写：失败只记日志，不影响本次已合并的配置。</summary>
     private static void TrySave(AppConfig cfg)
     {
@@ -160,7 +171,7 @@ public static class ConfigManager
 
     // ---- 合并 ----
 
-    private sealed class MergeStats
+    internal sealed class MergeStats
     {
         public int Dropped;  // 文件里有、默认配置里没有的键（已废弃字段）
         public int Filled;   // 文件里没有、用默认值补上的键

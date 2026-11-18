@@ -291,6 +291,18 @@ internal static class NativeInput
     public static bool SendMouseMoveAbsolute(int x, int y) => SendMouseMoveAbsolute(x, y, VirtualScreen());
 
     /// <summary>
+    /// 纯函数：物理像素坐标 → 虚拟桌面归一化坐标（0–65535），越界钳到边界。
+    /// 多屏时虚拟桌面原点可能是负数；宽高不足 2 时退化为 0，避免除零。
+    /// </summary>
+    internal static (int X, int Y) NormalizePointer(int x, int y, Rectangle v)
+    {
+        int vw = Math.Max(2, v.Width), vh = Math.Max(2, v.Height);
+        int nx = (int)Math.Round((x - v.X) * 65535.0 / (vw - 1));
+        int ny = (int)Math.Round((y - v.Y) * 65535.0 / (vh - 1));
+        return (Math.Clamp(nx, 0, 65535), Math.Clamp(ny, 0, 65535));
+    }
+
+    /// <summary>
     /// 绝对定位光标：把物理像素坐标归一化到虚拟桌面（0–65535）。
     /// 不用 SetCursorPos——它不产生标准输入事件，且不同 DPI 感知下语义不一致。
     /// 虚拟桌面范围由调用方缓存后传入：回放时每个点都要定位，逐点再查四次系统度量没有意义。
@@ -298,14 +310,12 @@ internal static class NativeInput
     /// </summary>
     public static bool SendMouseMoveAbsolute(int x, int y, Rectangle v)
     {
-        int vw = Math.Max(2, v.Width), vh = Math.Max(2, v.Height);
-        int nx = (int)Math.Round((x - v.X) * 65535.0 / (vw - 1));
-        int ny = (int)Math.Round((y - v.Y) * 65535.0 / (vh - 1));
+        var (nx, ny) = NormalizePointer(x, y, v);
         var input = new NativeMethods.INPUT { type = NativeMethods.INPUT_MOUSE };
         input.U.mi = new NativeMethods.MOUSEINPUT
         {
-            dx = Math.Clamp(nx, 0, 65535),
-            dy = Math.Clamp(ny, 0, 65535),
+            dx = nx,
+            dy = ny,
             mouseData = 0,
             dwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE
                       | NativeMethods.MOUSEEVENTF_VIRTUALDESK,

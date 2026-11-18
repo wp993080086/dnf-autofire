@@ -178,6 +178,16 @@ dotnet publish -c Release -r win-x64 ^
 
 产物位于 `bin/Release/net8.0-windows/win-x64/publish/dnf-autofire.exe`，为自包含单文件，目标机器无需安装 .NET 运行时。
 
+## 单元测试
+
+`tests/DnfAutoFire.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、轨迹坐标归一化、回放进度文本等纯逻辑（74 项）：
+
+```bash
+dotnet test tests/DnfAutoFire.Tests/DnfAutoFire.Tests.csproj
+```
+
+CI 在发布前会先以 Release 配置跑一遍测试，测试不通过就不会出包。
+
 ## 调试参数
 
 只在 `Debug` 构建里存在（源码在 `Program.Debug.cs`，整段用 `#if DEBUG` 包住）；`Release` 构建里这些入口连字符串都不会进入程序集，正式发布的 exe 不响应任何调试参数，传入也只会正常启动主界面。

@@ -20,7 +20,7 @@
 
 ```json
 {
-  "ConfigVersion": "1.2.0",
+  "ConfigVersion": "1.3.0",
   "Keys": [
     { "Key": "X", "IntervalMs": 50, "StopMode": "hold", "StopValue": 0, "Enabled": true },
     { "Key": "A", "IntervalMs": 100, "StopMode": "auto", "StopValue": 200, "Enabled": false }
@@ -39,7 +39,9 @@
   "PlayMode": "infinite",
   "PlayValue": 1,
   "PlayGapSec": 1,
-  "Mode": "B"
+  "Mode": "B",
+  "AntiTyping": true,
+  "ChatKey": "ENTER"
 }
 ```
 
@@ -53,6 +55,8 @@
 - `PlayMode`：`count`=回放 N 次 / `infinite`=一直放 / `duration`=定时 N 分钟；`PlayValue` 为对应的次数或分钟数。
 - `PlayGapSec`：两轮回放之间的等待秒数（`0` = 不等待，默认 `1`，上限 999999）。
 - `Mode`：`B`=拦截原生 / `A`=保留原生。
+- `AntiTyping`：防打字干扰开关（默认 `true`）。开启后焦点离开游戏进程、或按下聊天键进入打字态时，连按自动暂停并放行物理键，切回游戏 / 再按聊天键恢复。关闭则回到全局拦截的原行为。
+- `ChatKey`：聊天呼出键的规范名（默认 `ENTER`），可用 `ENTER` / `ESC` / `TAB`，或 `A`–`Z`、`0`–`9`、`SPC`、小键盘 `N0`–`N9` 与符号键。与连按目标键表相互独立——这三个编辑键绝不会变成连按目标。非法值加载时回落到 `ENTER`。
 
 ### 版本兼容
 

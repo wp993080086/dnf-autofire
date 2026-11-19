@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-19
+
 ### 新增
 
 - **鼠标侧键 X1/X2 连点**：鼠标页由三行扩到五行，侧键与其它键一样支持「松手停止 / 自动点击」。钩子按 `WM_XBUTTONDOWN/UP` 的 `mouseData` 高字区分两颗侧键，注入用 `MOUSEEVENTF_XDOWN/XUP` + 侧键序号；旧配置自动补出关闭状态的 X1/X2 两行
@@ -14,6 +16,7 @@
 - **崩溃弹窗**：未处理异常不再只吞进日志，弹窗显示类型/消息/堆栈，提供「打开日志」与「复制详情」；连环异常只弹一次
 - **注入被拦截可见提示**：连按/连点/回放的 `SendInput` 返回 0（未以管理员运行、游戏权限更高）时，托盘气泡 + 状态栏红字提示，不再「显示运行中却一下都没发出去」
 - **关于窗口**：Tab 栏右侧的版本/作者文案改为手型可点击，弹出小窗展示版本、作者、仓库名 `key-mouse-factory`、仓库地址（可点击用浏览器打开）与软件简介
+- **防打字干扰**（按键页，默认开启）：连按开启后，焦点离开游戏进程（游戏窗口未最小化、只是失焦也算）自动暂停连按、放行物理键，切回游戏自动恢复；游戏内按聊天键（默认 `ENTER`，可改 `ESC`/`TAB` 等）切换打字态，打字期间连按暂停、放行物理键，再按一次退出。两个来源独立生效，聊天键不吞给游戏（否则聊天框打不开）。取消勾选回到全局拦截的原行为
 
 ### 变更
 
@@ -22,11 +25,11 @@
 - **整窗渐变背景**：客户区从顶部 12% 主题色（`#E8F2FF`）线性渐变到一半高度纯白；标题栏由系统绘制、不在此范围
 - **移除页签切换过渡**：切页改为直接切换（此前的交叉淡化实际被蒙层层级问题掩盖，观感是闪烁）；Tab 下划线的滑动指示保留
 - **托盘菜单精简**：移除「开始录制 / 开始回放」两项，只保留「显示窗口 / 打开日志 / 退出程序」；录制与回放仍可用热键（`F9`/`F10`）或录制页按钮与状态条操作
-- 抽出 `HotkeyFallback.ToVk`、`ConfigManager.ParseAndSanitize`、`NativeInput.NormalizePointer`、`PlayText`、`RecordStore.SanitizeProfiles` 等纯函数，新增 xUnit 测试项目（79 项），CI 在 publish 前先跑 Release 测试
+- 抽出 `HotkeyFallback.ToVk`、`ConfigManager.ParseAndSanitize`、`NativeInput.NormalizePointer`、`PlayText`、`RecordStore.SanitizeProfiles`、`TypingGuard.ShouldPause` 等纯函数，新增 xUnit 测试项目（109 项），CI 在 publish 前先跑 Release 测试
 - 键名 ↔ 虚拟键码的映射集中到 `KeyNames.cs`，界面校验、配置读取、注入路径共用一张表，避免三处各写一份
 - 明确不支持 `F1`–`F12`、方向键、`TAB`/`ENT`/`ESC`/`HOME`/`END`/`PGUP`/`PGDN`、修饰键与小键盘符号键。F 键留给热键（否则目标键会被系统当热键截走，连按收不到按下），方向键与编辑键在游戏里没有连按价值，还会吃掉文本框的光标移动与 Tab 切焦点
 - 注入层按 VK 补齐扩展键的 `E0` 前缀。当前支持集已无扩展键，属预防性修正：少了它方向键会被目标程序识别成小键盘上的同名键（上箭头 0x26 注入成 0x68 小键盘 8）
-- 「拦截原生」模式仍为全局拦截：连按空格或符号键时，游戏外场景同样无法输入该键
+- 「拦截原生」模式仍为全局拦截：未开启防打字干扰时，连按空格或符号键时游戏外场景同样无法输入该键；开启后由防打字干扰在焦点离开时自动放行
 
 ### 修复
 
@@ -133,6 +136,7 @@
 - `F6` 单键开关热键、托盘运行
 - 配置持久化（`config.json`，无写权限自动回退 `%APPDATA%`）与错误日志（`error.log`）
 
-[Unreleased]: https://github.com/wp993080086/key-mouse-factory/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/wp993080086/key-mouse-factory/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/wp993080086/key-mouse-factory/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/wp993080086/key-mouse-factory/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wp993080086/key-mouse-factory/compare/v1.0.0...v1.1.0

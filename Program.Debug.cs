@@ -30,6 +30,7 @@ internal static partial class Program
         if (args.Length >= 3 && args[1] == "--savetest") { RunSaveTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--keynametest") { RunKeyNameTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--keycaptest") { RunKeyCapTest(args); return true; }
+        if (args.Length >= 2 && args[1] == "--chatkeytest") { RunChatKeyTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--xbuttontest") { RunXButtonTest(args); return true; }
         if (args.Length >= 2 && args[1] == "--hotkeyfallbacktest") { RunHotkeyFallbackTest(args); return true; }
         if (args.Length >= 3 && args[1] == "--instancetest") { RunInstanceTest(args); return true; }
@@ -122,6 +123,16 @@ internal static partial class Program
         form.Show();
         Application.DoEvents();
         form.DebugKeyCaptureTest();
+        form.Close();
+    }
+
+    // 调试用：key-mouse-factory --chatkeytest 验证聊天键捕获 + 防打字干扰 UI 初态
+    private static void RunChatKeyTest(string[] args)
+    {
+        using var form = new MainForm();
+        form.Show();
+        Application.DoEvents();
+        form.DebugChatKeyTest();
         form.Close();
     }
 

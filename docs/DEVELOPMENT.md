@@ -21,7 +21,7 @@ dotnet publish -c Release -r win-x64 ^
 
 ## 单元测试
 
-`tests/KeyMouseFactory.Tests` 是 xUnit 项目，覆盖键名映射、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、录制方案脏数据钳制、轨迹坐标归一化、回放进度文本等纯逻辑（79 项）：
+`tests/KeyMouseFactory.Tests` 是 xUnit 项目，覆盖键名映射、聊天键映射与规范化、防打字干扰暂停判定、热键回退、鼠标侧键消息与注入标志、配置逐字段合并与越界钳制、录制方案脏数据钳制、轨迹坐标归一化、回放进度文本等纯逻辑（109 项）：
 
 ```bash
 dotnet test tests/KeyMouseFactory.Tests/KeyMouseFactory.Tests.csproj
@@ -52,6 +52,7 @@ CI 在发布前会先以 Release 配置跑一遍测试，测试不通过就不�
 | `--keytest` | 打印配置里收集到的连按目标键名与 VK |
 | `--keynametest` | 校验键名 ↔ VK 映射的往返一致性、唯一性与非法值拒绝 |
 | `--keycaptest` | 喂物理按键给键名框，验证捕获与不拦截规则 |
+| `--chatkeytest` | 验证聊天键捕获（ENTER/ESC/TAB/空格/符号等）与防打字干扰 UI 初态（开关联动、编辑框启用态） |
 | `--xbuttontest` | 校验 X1/X2 侧键的消息解析、注入标志、配置映射与默认行 |
 | `--blockedtest` | 模拟注入被系统拦截，验证托盘气泡与状态栏告警链路 |
 | `--focustest` | 打印各控件的当前焦点与光标状态 |

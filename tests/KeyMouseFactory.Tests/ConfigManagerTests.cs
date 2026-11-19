@@ -118,4 +118,21 @@ public class ConfigManagerTests
         Assert.Equal(2, Parse("[1,2,3]").Keys.Count);
         Assert.Equal(5, Parse("[1,2,3]").MouseClicks.Count);
     }
+
+    [Fact]
+    public void OldConfigGetsAntiTypingDefaults()
+    {
+        // 防打字干扰是新增字段：旧配置没有时用默认值（开 + Enter），且聊天键非法值回落
+        var cfg = Parse("""{"StartHotkey":"F6"}""");
+        Assert.True(cfg.AntiTyping);
+        Assert.Equal("ENTER", cfg.ChatKey);
+
+        var dirty = Parse("""{"AntiTyping":true,"ChatKey":"F5"}""");
+        Assert.True(dirty.AntiTyping);
+        Assert.Equal("ENTER", dirty.ChatKey); // F5 不是合法聊天键 → 回落默认
+
+        var custom = Parse("""{"AntiTyping":false,"ChatKey":"esc"}""");
+        Assert.False(custom.AntiTyping);
+        Assert.Equal("ESC", custom.ChatKey);
+    }
 }

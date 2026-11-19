@@ -529,6 +529,73 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>调试入口：--chatkeytest 验证聊天键捕获 + 防打字干扰 UI 初态。</summary>
+    internal void DebugChatKeyTest()
+    {
+        bool oldLoading = _loading;
+        _loading = true; // 别让测试写 config.json
+        int bad = 0;
+        try
+        {
+            ShowWindow();
+            var txt = txtChatKey.Inner;
+
+            // 聊天专用键 + 部分连按键应能捕获
+            var direct = new (Keys Key, string Expect)[]
+            {
+                (Keys.Enter, "ENTER"), (Keys.Escape, "ESC"), (Keys.Tab, "TAB"),
+                (Keys.Space, "SPC"), (Keys.OemQuestion, "/"), (Keys.NumPad5, "N5"),
+            };
+            foreach (var (key, expect) in direct)
+            {
+                txt.Clear();
+                ChatKeyBox_KeyDown(txt, new KeyEventArgs(key));
+                string got = txt.Text;
+                if (got != expect) { bad++; Console.WriteLine($"[chat] BAD {key,-12} 期望 {expect} 实际「{got}」"); }
+                else Console.WriteLine($"[chat] ok  {key,-12} → {got}");
+            }
+
+            // A-Z/0-9 交给 KeyPress，不在 KeyDown 写
+            var letters = new[] { Keys.A, Keys.D9 };
+            foreach (Keys key in letters)
+            {
+                txt.Clear();
+                var ev = new KeyEventArgs(key);
+                ChatKeyBox_KeyDown(txt, ev);
+                if (ev.Handled || txt.Text.Length != 0) { bad++; Console.WriteLine($"[chat] BAD {key} 不该在 KeyDown 处理"); }
+            }
+
+            // 不支持的键（F 键 / 修饰键）被吞、不写入
+            foreach (Keys key in new[] { Keys.F5, Keys.LShiftKey })
+            {
+                txt.Clear();
+                var ev = new KeyEventArgs(key);
+                ChatKeyBox_KeyDown(txt, ev);
+                if (txt.Text.Length != 0) { bad++; Console.WriteLine($"[chat] BAD {key} 不该写入"); }
+            }
+
+            // 初态：勾选默认开、聊天键默认 ENTER、编辑框启用
+            chkAntiTyping.Checked = true;
+            ApplyAntiTypingUi();
+            Console.WriteLine($"[chat] ui: chk={chkAntiTyping.Checked} key={txtChatKey.Text} enabled={txtChatKey.Enabled} " +
+                              $"loc={txtChatKey.Location} size={txtChatKey.Size}");
+            if (!txtChatKey.Enabled) { bad++; Console.WriteLine("[chat] BAD 勾选后聊天键框未启用"); }
+
+            chkAntiTyping.Checked = false;
+            ApplyAntiTypingUi();
+            if (txtChatKey.Enabled) { bad++; Console.WriteLine("[chat] BAD 未勾选时聊天键框应置灰"); }
+
+            Console.WriteLine(bad == 0 ? "[chat] PASS" : $"[chat] FAIL（{bad} 处异常）");
+        }
+        finally
+        {
+            _loading = oldLoading;
+            txtChatKey.Text = ChatKeyNames.Default;
+            chkAntiTyping.Checked = true;
+            Close();
+        }
+    }
+
     /// <summary>调试入口：打印托盘菜单项，确认「打开日志」等出口都在。</summary>
     internal void DebugDumpTrayMenu()
     {

@@ -33,6 +33,7 @@ internal sealed class AutoFireEngine
 
     private readonly List<KeyState> _keys = new();
     private readonly AutoResetEvent _wake = new(false); // 按键 / 松手 / 停止时唤醒工作线程，空闲时它就一直睡着
+    private readonly TypingGuard _guard = new();        // 防打字干扰：焦点离开 / 聊天态时暂停注入
     private KeyboardHook? _hook;
     private Thread? _worker;
     private volatile bool _stop;
@@ -75,6 +76,12 @@ internal sealed class AutoFireEngine
     /// <summary>"A" 保留原生并叠加；"B" 拦截原生仅模拟。</summary>
     public string Mode { get; set; } = "B";
 
+    /// <summary>防打字干扰是否生效；chatVk=聊天键 VK。必须在 Start 前调用。</summary>
+    public void ConfigureGuard(bool enabled, int chatVk) => _guard.Configure(enabled, chatVk);
+
+    /// <summary>当前是否因防打字干扰而暂停（供 UI 状态显示）。</summary>
+    public bool TypingPaused => _guard.Paused;
+
     [DllImport("winmm.dll")]
     private static extern uint timeBeginPeriod(uint ms);
 
@@ -106,6 +113,7 @@ internal sealed class AutoFireEngine
 
         _stop = false;
         _wake.Reset();   // 上一次停止可能留下一次唤醒信号，先吃掉
+        _guard.Arm();    // 锁定游戏进程 + 重置打字态（必须在装钩子和启动线程之前）
         // 1ms 计时精度不在这里要：工作线程只在真要连按时才提精度，空闲时把系统计时器还回去
         _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "AutoFireEngine" };
         _worker.Start();
@@ -130,6 +138,7 @@ internal sealed class AutoFireEngine
             }
         }
         _keys.Clear();
+        _guard.Disarm();
         _hook?.Dispose();
         _hook = null;
         Running = false;
@@ -143,6 +152,25 @@ internal sealed class AutoFireEngine
         var sw = Stopwatch.StartNew();
         while (!_stop)
         {
+            // 防打字干扰：每轮刷新焦点状态（切回游戏时清残留打字态，保证不按键也能自动恢复）
+            _guard.Refresh();
+
+            // 暂停态（焦点离开游戏 / 聊天键打字态）：抬起所有模拟按下的键，避免打字时卡键或误注入，
+            // 然后睡一小会儿等恢复。用 _wake 可被按键/停止及时叫醒。
+            if (_guard.Paused)
+            {
+                foreach (var k in _keys)
+                {
+                    if (k.IsDown)
+                    {
+                        Send(k.Vk, up: true);
+                        k.IsDown = false;
+                    }
+                }
+                _wake.WaitOne(80);
+                continue;
+            }
+
             long now = sw.ElapsedTicks;
             foreach (var k in _keys)
             {
@@ -261,8 +289,21 @@ internal sealed class AutoFireEngine
 
     private void OnKeyDown(int vk)
     {
+        // 聊天键优先：切换打字态并放行给游戏（不吞，游戏才能用它开/关聊天框），
+        // 且不当作连按目标触发。ObserveDown 返回 true 表示这个键已被守卫消费。
+        if (_guard.ObserveDown(vk))
+        {
+            _wake.Set(); // 打字态切换后让工作线程尽快进出暂停
+            return;
+        }
+
         var k = _keys.FirstOrDefault(x => x.Vk == vk);
         if (k == null) return;
+
+        // 暂停态（焦点离开游戏 / 聊天打字中）：放行物理键，绝不吞——否则打字被拦。
+        // Held 不置位，暂停期间按目标键不触发连按。
+        if (_guard.Paused) return;
+
         if (Mode == "B") _hook!.SuppressCurrent();
         if (k.Mode == TriggerMode.Auto) return; // 自动连按不理会物理按压
         if (k.Held) return; // 原生长按会反复触发 keydown
@@ -274,8 +315,19 @@ internal sealed class AutoFireEngine
 
     private void OnKeyUp(int vk)
     {
+        _guard.ObserveUp(vk); // 清聊天键的按下沿标志（长按自动重复只记一次）
+
         var k = _keys.FirstOrDefault(x => x.Vk == vk);
         if (k == null) return;
+
+        // 暂停态仍要维护物理按住状态：否则玩家在别的软件里松开目标键后切回游戏，
+        // Held 残留 true 会变成"没人按键却继续连发"。但暂停时不吞物理键（打字用）。
+        if (_guard.Paused)
+        {
+            if (k.Mode != TriggerMode.Auto) { k.Held = false; _wake.Set(); }
+            return;
+        }
+
         if (Mode == "B") _hook!.SuppressCurrent();
         if (k.Mode == TriggerMode.Auto) return; // 自动连按不受松手影响
         k.Held = false; // 抬起由 WorkerLoop 统一处理（若正按着会立即释放）

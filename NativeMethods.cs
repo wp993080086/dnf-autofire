@@ -155,6 +155,23 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+    // 前台窗口检测（防打字干扰）：按进程 PID 判断焦点是否还在游戏，
+    // 比按窗口句柄稳——游戏弹个子窗口、切输入法时 HWND 会变，但进程没变。
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    /// <summary>当前前台窗口所属的进程 PID；取不到返回 0。</summary>
+    internal static uint ForegroundPid()
+    {
+        IntPtr hwnd = GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return 0;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        return pid;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 

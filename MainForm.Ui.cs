@@ -8,9 +8,15 @@ public partial class MainForm : Form
     {
         // 录制页在同一个位置放「开始录制 + 开始回放」两个按钮，其它 Tab 仍是单个主按钮
         bool record = _tabIndex == TabRecord;
+        bool keys = _tabIndex == TabKeys;
         btnMain.Visible = !record;
         btnRecord.Visible = record;
         btnPlay.Visible = record;
+        // 防打字干扰只属于连按（按键页）：录制页被两个按钮占满、鼠标页语义不符，都隐藏
+        chkAntiTyping.Visible = keys;
+        lblChatKey.Visible = keys;
+        txtChatKey.Visible = keys;
+        if (keys) ApplyAntiTypingUi();
 
         switch (_tabIndex)
         {
@@ -22,6 +28,7 @@ public partial class MainForm : Form
             case TabMouse:
                 lblTarget.Text = "当前控制：鼠标连点";
                 btnMain.Text = _mouseEngine.Running ? "关闭连点" : "开启连点";
+                btnMain.Width = 366; // 鼠标页无附加控件，按钮铺满（保持原样）
                 btnMain.Enabled = true;
                 btnMain.Danger = _mouseEngine.Running;
                 break;
@@ -29,6 +36,7 @@ public partial class MainForm : Form
             default: // TabKeys
                 lblTarget.Text = "当前控制：连按";
                 btnMain.Text = _engine.Running ? "关闭连按" : "开启连按";
+                btnMain.Width = 236; // 缩窄，右侧留给防打字干扰控件
                 btnMain.Enabled = true;
                 btnMain.Danger = _engine.Running;
                 break;
@@ -99,12 +107,15 @@ public partial class MainForm : Form
         var pnlRun = new AntPanel { Location = new Point(2, 306), Size = new Size(394, 92), BackColor = Color.Transparent };
         const int RunBtnW = 175;              // (366 - 间距 16) / 2，两个按钮均分同一块宽度
         const int RunBtnGap = 16;
+        // 主按钮在按键页缩窄：右侧腾出的空间（红框处）放「防打字干扰」开关 + 聊天键编辑框。
+        // 录制页两个按钮各 175 铺满，仍保持原样；这里只改单主按钮的宽度。
+        const int RunBtnSingleW = 236;
         btnMain = new AntButton
         {
             Kind = AntButton.AntKind.Primary,
             Text = "开启连按",
             Location = new Point(14, 6),
-            Size = new Size(366, 40),
+            Size = new Size(RunBtnSingleW, 40),
             Font = AntStyle.GetFont(10f)
         };
         btnRecord = new AntButton
@@ -142,11 +153,57 @@ public partial class MainForm : Form
             AutoSize = true,
             ForeColor = AntStyle.TextTertiary
         };
+        // 防打字干扰（仅按键页显示）：勾选开关 + 聊天键编辑框，占据主按钮右侧腾出的空间。
+        // 勾选后焦点离开游戏或进入聊天态时暂停连按，避免误拦打字。
+        chkAntiTyping = new AntCheckBox
+        {
+            Text = "防打字干扰",
+            Location = new Point(258, 6),
+            Size = new Size(128, 26),
+            Font = AntStyle.GetFont(9f)
+        };
+        lblChatKey = new Label
+        {
+            Text = "聊天键",
+            Location = new Point(258, 40),
+            AutoSize = true,
+            ForeColor = AntStyle.TextSec,
+            Font = AntStyle.GetFont(9f)
+        };
+        txtChatKey = new AntInput
+        {
+            Location = new Point(306, 36),
+            Size = new Size(80, 30)
+        };
+        txtChatKey.Inner.MaxLength = ChatKeyNames.MaxLength;
+        txtChatKey.Inner.CharacterCasing = CharacterCasing.Upper;
+        txtChatKey.Inner.TextAlign = HorizontalAlignment.Center;
+        txtChatKey.Text = ChatKeyNames.Default;
+        // 聊天键用物理按键捕获：A-Z/0-9/符号由 KeyDown 按 VK 写入，与各处键名框同构
+        txtChatKey.Inner.KeyDown += ChatKeyBox_KeyDown;
+        txtChatKey.Inner.KeyPress += ChatKeyBox_KeyPress;
+        txtChatKey.Inner.Leave += (_, _) =>
+        {
+            string fixedKey = ChatKeyNames.Sanitize(txtChatKey.Text);
+            if (txtChatKey.Text != fixedKey) txtChatKey.Text = fixedKey;
+            if (!_loading) SaveConfig();
+        };
+        _keyTip.SetToolTip(txtChatKey, "打开聊天框的键，按下即切换打字暂停（" + ChatKeyNames.Help + "）");
+        _keyTip.SetToolTip(txtChatKey.Inner, "打开聊天框的键，按下即切换打字暂停（" + ChatKeyNames.Help + "）");
+        chkAntiTyping.CheckedChanged += (_, _) =>
+        {
+            ApplyAntiTypingUi();
+            if (!_loading) SaveConfig();
+        };
+
         pnlRun.Controls.Add(btnMain);
         pnlRun.Controls.Add(btnRecord);
         pnlRun.Controls.Add(btnPlay);
         pnlRun.Controls.Add(lblTarget);
         pnlRun.Controls.Add(lblStatus);
+        pnlRun.Controls.Add(chkAntiTyping);
+        pnlRun.Controls.Add(lblChatKey);
+        pnlRun.Controls.Add(txtChatKey);
         Controls.Add(pnlRun);
 
         // 设置区（右下）：热键下拉框跟随当前 Tab——按键页编辑连按热键（默认 F6）、

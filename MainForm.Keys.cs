@@ -29,6 +29,7 @@ public partial class MainForm : Form
         }
 
         _engine.Mode = cboMode.SelectedIndex == 0 ? "A" : "B";
+        _engine.ConfigureGuard(chkAntiTyping.Checked, ChatKeyNames.ToVk(txtChatKey.Text));
         try
         {
             _engine.Start(targets);
@@ -447,6 +448,66 @@ public partial class MainForm : Form
         }
     }
 
+    // ---------- 聊天键编辑框 ----------
+
+    /// <summary>
+    /// 聊天键捕获：Enter/ESC/TAB 与符号键走这里按 VK 写入；A-Z/0-9 交给 KeyPress。
+    /// 与键名框不同，聊天键允许 Enter/TAB——它们正是打开聊天框的常用键，但不能让 TextBox
+    /// 把它们当导航/确认消费掉，所以这里直接写入并吞掉按键。
+    /// </summary>
+    private void ChatKeyBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox txt) return;
+        if (e.Control || e.Alt) return;
+        if (KeyNames.IsModifier(e.KeyCode)) return;
+
+        // 退格保留删除字符；Delete 清空
+        if (e.KeyCode == Keys.Back) return;
+        if (e.KeyCode == Keys.Delete)
+        {
+            txt.Clear();
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            if (!_loading) SaveConfig();
+            return;
+        }
+
+        string? name = ChatKeyNames.FromKeys(e.KeyCode);
+        if (name == null) { e.Handled = true; e.SuppressKeyPress = true; return; } // 不支持的键：吞掉，不留半个键名
+        if (name.Length == 1 && char.IsLetterOrDigit(name[0])) return;             // 交给 KeyPress
+
+        txt.Text = name;
+        txt.SelectionStart = txt.TextLength;
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+        if (!_loading) SaveConfig();
+    }
+
+    private void ChatKeyBox_KeyPress(object? sender, KeyPressEventArgs e)
+    {
+        if (sender is not TextBox txt) return;
+        char c = e.KeyChar;
+        if (char.IsControl(c)) return;
+        if (c >= 'a' && c <= 'z') c = char.ToUpperInvariant(c);
+        if (!(c is >= 'A' and <= 'Z' or >= '0' and <= '9'))
+        {
+            e.Handled = true;
+            return;
+        }
+        // 整体替换而非拼接
+        if (txt.SelectionLength == 0 && txt.TextLength > 0) txt.Clear();
+        e.KeyChar = c;
+    }
+
+    /// <summary>聊天键框启用态随勾选开关走；未勾选时整组置灰，避免"开了却不生效"的误解。</summary>
+    private void ApplyAntiTypingUi()
+    {
+        if (txtChatKey == null || lblChatKey == null) return;
+        bool on = chkAntiTyping.Checked;
+        txtChatKey.Enabled = on && !_engine.Running;
+        lblChatKey.Enabled = on;
+    }
+
     private void MsBox_KeyPress(object? sender, KeyPressEventArgs e)
     {
         // 仅正整数，禁止负号、小数点
@@ -500,6 +561,8 @@ public partial class MainForm : Form
         btnAdd.Enabled = !locked && _rows.Count < MaxRows;
         cboStartKey.Enabled = !locked;
         cboMode.Enabled = !locked;
+        chkAntiTyping.Enabled = !locked;
+        ApplyAntiTypingUi();
     }
 
     /// <summary>自动连按次数：0 = 无限，非法输入（空/负数）回落 0，上限 99999。</summary>

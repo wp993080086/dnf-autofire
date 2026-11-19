@@ -102,6 +102,9 @@ public partial class MainForm : Form
     private Label lblTarget = null!;        // "当前控制：连按/鼠标连点" 标识
     private Label lblStatus = null!;
     private AntSelect cboStartKey = null!, cboMode = null!;
+    private AntCheckBox chkAntiTyping = null!;   // 防打字干扰开关（按键页底栏）
+    private Label lblChatKey = null!;            // "聊天键" 标签
+    private AntInput txtChatKey = null!;         // 聊天呼出键编辑框（按键捕获）
     private Label lblHotkey = null!;   // "连按热键/连点热键" 标签，随 Tab 切换
     private Label lblMode = null!;     // "连按模式" 标签（仅按键页显示）
     private Label lblModeTip = null!;  // 底部提示文字，随 Tab 切换
@@ -418,6 +421,8 @@ public partial class MainForm : Form
             PlayValue = Math.Max(1, numPlayValue.Value),
             PlayGapSec = Math.Clamp(numPlayGap.Value, 0, MacroPlayer.MaxGapSec),
             Mode = cboMode.SelectedIndex == 0 ? "A" : "B",
+            AntiTyping = chkAntiTyping.Checked,
+            ChatKey = ChatKeyNames.Sanitize(txtChatKey.Text),
             Keys = _rows.Select(r => new KeyConfig
             {
                 Key = r.TxtKey.Text.Trim().ToUpper(),
@@ -486,6 +491,9 @@ public partial class MainForm : Form
         UpdateRowButtons();
         cboStartKey.Text = _config.StartHotkey; // 初始在按键页 → 显示连按热键
         cboMode.SelectedIndex = _config.Mode == "A" ? 0 : 1;
+        chkAntiTyping.Checked = _config.AntiTyping;
+        txtChatKey.Text = ChatKeyNames.Sanitize(_config.ChatKey);
+        ApplyAntiTypingUi();
 
         // 鼠标连点行：固定左/右/滚轮三行，按 Button 匹配配置
         var mouseCfg = _config.MouseClicks ?? new List<MouseClickConfig>();

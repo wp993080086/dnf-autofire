@@ -64,6 +64,8 @@ public class AppConfig
     public int PlayValue { get; set; } = 1;              // 回放次数或分钟数
     public int PlayGapSec { get; set; } = 1;              // 回放间隔：两轮之间的等待（秒，0=不等待）
     public string Mode { get; set; } = "B";              // 连按模式：A=保留原生（放行物理键，叠加连按）/ B=拦截原生（只发模拟）
+    public bool AntiTyping { get; set; } = true;         // 防打字干扰：焦点离开游戏 / 聊天键打字态时暂停连按
+    public string ChatKey { get; set; } = "ENTER";      // 聊天呼出键（切换打字态），独立于连按目标键表
 
     public static AppConfig Default() => new()
     {
@@ -280,6 +282,7 @@ public static class ConfigManager
         cfg.PlaybackHotkey = HotkeyOr(cfg.PlaybackHotkey, "F10");
 
         cfg.Mode = cfg.Mode == "A" ? "A" : "B";
+        cfg.ChatKey = ChatKeyNames.Sanitize(cfg.ChatKey);
         cfg.PlayMode = cfg.PlayMode is "count" or "duration" ? cfg.PlayMode : "infinite";
         cfg.PlayValue = Math.Clamp(cfg.PlayValue, 1,
             cfg.PlayMode == "duration" ? Limits.PlayMinuteMax : Limits.PlayCountMax);
